@@ -4,7 +4,7 @@
 #include <queue>
 #include <algorithm>
 
-GoGame::GoGame(int board_size) : board_size_(board_size), action_size_(board_size * board_size + 1) {
+GoGame::GoGame(int board_size, float dir_epsilon, float dir_alpha) : board_size_(board_size), dir_epsilon_(dir_epsilon), dir_alpha_(dir_alpha), action_size_(board_size * board_size + 1) {
     Reset();
 }
 
@@ -290,7 +290,7 @@ std::vector<float> GoGame::GetStateFeatures() const {
 }
 
 std::unique_ptr<GameInterface> GoGame::Clone() const {
-    auto clone = std::make_unique<GoGame>(board_size_);
+    auto clone = std::make_unique<GoGame>(board_size_, dir_epsilon_, dir_alpha_);
     clone->board_ = this->board_;
     clone->current_player_ = this->current_player_;
     clone->previous_states_ = this->previous_states_;
@@ -317,5 +317,5 @@ std::string GoGame::ToString() const {
 }
 
 std::pair<float, float> GoGame::GetDirichletParams() const {
-    return {0.25f, 0.03f};
+    return {dir_epsilon_, dir_alpha_};
 }

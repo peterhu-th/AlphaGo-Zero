@@ -2,13 +2,12 @@
 
 #include "../GameInterface.h"
 #include <vector>
-#include <unordered_set>
 #include <set>
 
-class GoGame : public GameInterface {
+class GomokuGame : public GameInterface {
 public:
-    GoGame(int board_size, float dir_epsilon = 0.25f, float dir_alpha = 0.03f);
-    ~GoGame() override = default;
+    GomokuGame(int board_size, float dir_epsilon = 0.25f, float dir_alpha = 0.3f);
+    ~GomokuGame() override = default;
 
     std::pair<int, int> GetBoardSize() const override;
     int GetActionSize() const override;
@@ -30,16 +29,5 @@ private:
     Player current_player_;
     std::vector<Player> board_;
     
-    // 用于打劫检测的哈希记录
-    std::unordered_set<std::string> previous_states_;
-    
-    // 连续 pass 次数
-    int pass_count_;
-    
-    // 内部方法
-    bool IsLegalMove(int x, int y, Player player) const;
-    bool HasLiberty(int x, int y, Player player, std::vector<bool>& visited) const;
-    void RemoveDeadStones(int x, int y, Player opponent);
-    std::string GetBoardHash() const;
-    float CalculateScore() const; // Tromp-Taylor 规则算分
+    bool CheckWin(int x, int y, Player player) const;
 };

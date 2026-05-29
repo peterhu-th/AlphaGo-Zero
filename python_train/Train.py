@@ -11,24 +11,13 @@ root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(root_dir)
 sys.path.append(os.path.join(root_dir, 'lib'))
 
-# 创建日志目录和配置 logging
-log_dir = os.path.join(root_dir, 'logs')
-os.makedirs(log_dir, exist_ok=True)
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[
-        logging.FileHandler(os.path.join(log_dir, 'train_log.txt')),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-
 from python_nn.ModelManager import ModelManager
 from python_train.SelfPlayWorker import SelfPlayWorker
 from python_train.ReplayBuffer import ReplayBuffer
 
 class Trainer:
-    def __init__(self, config_path):
+    def __init__(self, config_path, mode="go"):
+        self.mode = mode
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
             
@@ -39,9 +28,9 @@ class Trainer:
                                    weight_decay=1e-4)
         
         self.replay_buffer = ReplayBuffer(self.config['train_params']['replay_buffer_size'])
-        self.worker = SelfPlayWorker(self.config, self.model_manager)
+        self.worker = SelfPlayWorker(self.config, self.model_manager, self.mode)
         
-        self.weights_dir = os.path.join(root_dir, 'weights')
+        self.weights_dir = os.path.join(root_dir, 'weights', self.mode)
         os.makedirs(self.weights_dir, exist_ok=True)
         
     def collect_selfplay_data(self, num_games):
@@ -101,5 +90,25 @@ class Trainer:
             logging.info(f"Model saved to {model_path}")
 
 if __name__ == "__main__":
-    trainer = Trainer(os.path.join(root_dir, 'config', 'Config.yaml'))
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--mode', type=str, default='go', choices=['go', 'gomoku'])
+    args = parser.parse_args()
+
+    log_dir = os.path.join(root_dir, 'logs')
+    os.makedirs(log_dir, exist_ok=True)
+    
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+        
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        handlers=[
+            logging.FileHandler(os.path.join(log_dir, f'{args.mode}_train_log.txt')),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+
+    trainer = Trainer(os.path.join(root_dir, 'config', f'{args.mode}.yaml'), args.mode)
     trainer.run_training_loop(2)

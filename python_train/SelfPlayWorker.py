@@ -8,16 +8,22 @@ import core_engine
 from python_nn.ModelManager import ModelManager
 
 class SelfPlayWorker:
-    def __init__(self, config, model_manager):
+    def __init__(self, config, model_manager, mode="go"):
         self.config = config
         self.model_manager = model_manager
+        self.mode = mode
         self.board_size = config['env_params']['board_size']
         self.num_simulations = config['mcts_params']['num_simulations']
         self.c_puct = config['mcts_params']['c_puct']
 
     def play_one_game(self):
-        game = core_engine.GoGame(self.board_size)
-        # MCTS 不再需要传入 Dir 噪声参数，C++ 会向 Game 获取
+        dir_eps = self.config['mcts_params']['dirichlet_epsilon']
+        dir_alpha = self.config['mcts_params']['dirichlet_alpha']
+        if self.mode == 'go':
+            game = core_engine.GoGame(self.board_size, dir_eps, dir_alpha)
+        else:
+            game = core_engine.GomokuGame(self.board_size, dir_eps, dir_alpha)
+
         mcts = core_engine.MCTS(self.model_manager.evaluate, self.num_simulations, self.c_puct)
 
         states = []
@@ -28,9 +34,6 @@ class SelfPlayWorker:
         while True:
             temp = 1.0 if step_count < 30 else 0.0
             
-            # GetActionProb 会在有必要时施加 Dirichlet 噪声 (由 C++ 内部判断)
-            # 为了训练自对弈中的探索，GetActionProb 第二个参数可以控制是否施加噪声
-            # 此处我们把该功能移到了 C++ 端，C++ 端只在 root 展开时自动加噪声
             action_prob = mcts.GetActionProb(game, temp)
 
             state_features = game.GetStateFeatures()

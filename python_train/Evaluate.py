@@ -1,5 +1,6 @@
 import sys
 import os
+import argparse
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'lib'))
@@ -9,7 +10,8 @@ from python_nn.ModelManager import ModelManager
 import yaml
 
 class Evaluator:
-    def __init__(self, config_path):
+    def __init__(self, config_path, mode="go"):
+        self.mode = mode
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
             
@@ -21,7 +23,13 @@ class Evaluator:
         self.candidate_model.load_model(candidate_path)
 
     def play_match(self, current_best_is_black=True):
-        game = core_engine.GoGame(self.config['env_params']['board_size'])
+        dir_eps = self.config['mcts_params']['dirichlet_epsilon']
+        dir_alpha = self.config['mcts_params']['dirichlet_alpha']
+        
+        if self.mode == 'go':
+            game = core_engine.GoGame(self.config['env_params']['board_size'], dir_eps, dir_alpha)
+        else:
+            game = core_engine.GomokuGame(self.config['env_params']['board_size'], dir_eps, dir_alpha)
         
         if current_best_is_black:
             black_eval = self.best_model.evaluate
@@ -83,4 +91,10 @@ class Evaluator:
             return False
 
 if __name__ == "__main__":
-    evaluator = Evaluator(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config', 'Config.yaml'))
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--mode', type=str, default='go', choices=['go', 'gomoku'])
+    args = parser.parse_args()
+    
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    config_file = os.path.join(root_dir, 'config', f'{args.mode}.yaml')
+    evaluator = Evaluator(config_file, args.mode)

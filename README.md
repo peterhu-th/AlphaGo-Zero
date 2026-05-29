@@ -2,7 +2,7 @@
 
 这是一个基于 AlphaGo Zero 论文复现的两人棋类游戏自对弈强化学习框架。该项目采用了 **C++ (核心引擎与 MCTS)** 和 **Python (神经网络与高层工作流)** 的混合架构，利用 `Pybind11` 交互，实现了计算性能与深度学习灵活性的平衡。
 
-目前项目已经完全支持但不限于 9x9/19x19 围棋、五子棋等，只需要修改配置文件即可兼容。
+目前项目支持 9x9 围棋、五子棋。
 
 ## 1. 配置需要与环境准备
 
@@ -41,32 +41,29 @@ AlphaGo/
 └── test_engine.py          # 基础逻辑连通性测试脚本
 ```
 
-> **关于空 `__init__.py` 的说明：**  
-> 在 `python_nn`, `python_train` 等子目录中可能存在空的 `__init__.py`。这些文件的作用是告诉 Python 解释器将该目录视为一个“模块包”（Package），使得其他脚本可以通过 `from python_nn.ModelManager import ...` 的方式导入其中的类。**请予以保留。**
-
 ## 3. 运行步骤
 
-### 第一步：编译 C++ 扩展
-在您的 Conda 虚拟环境中，使用以下命令编译加速引擎，并将其移动到 `lib/` 目录供 Python 调用：
+### 编译 C++ 扩展
+在 Conda 虚拟环境中，使用以下命令编译加速引擎，并将其移动到 `lib/` 目录供 Python 调用：
 ```bash
 python setup.py build_ext --inplace
 mkdir -p lib
 mv core_engine*.so lib/
 ```
 
-### 第二步：修改超参数
-您可以进入 `config/Config.yaml` 修改训练的超参数（如网络层数、MCTS 模拟次数、棋盘长宽等）。
+### 修改超参数
+在 `config/Config.yaml` 修改训练的超参数。
 
-### 第三步：开始自对弈训练
+### 自对弈训练
 执行以下命令，程序将开始长期的自对弈搜集数据并更新模型：
 ```bash
 python python_train/Train.py
 ```
-> **提示：** 训练的权重将保存在 `weights/` 目录，训练日志会输出到控制台并记录于 `logs/train_log.txt` 中。
+> 训练的权重将保存在 `weights/` 目录，训练日志会输出到控制台并记录于 `logs/train_log.txt` 中。
 
-### 第四步：人机对战测试
-想要验证当前的训练效果，您可以随时启动对战终端（终端会自动扫描 `weights/` 加载最新的权重）：
+### 人机对战测试
+启动对战终端（终端会自动扫描 `weights/` 加载最新的权重）：
 ```bash
-python api_frontend/GameServer.py
+python frontend/GameServer.py
 ```
-终端会询问您选择执黑（先手）还是执白，通过输入诸如 `0 1` (行 列) 的坐标来进行落子互动！
+终端会询问您选择执黑（先手）还是执白，通过输入诸如 `A 1` (行 列) 的坐标来进行落子互动！

@@ -3,6 +3,7 @@
 #include <pybind11/functional.h>
 #include "GameInterface.h"
 #include "games/GoGame.h"
+#include "games/GomokuGame.h"
 #include "MCTS.h"
 
 namespace py = pybind11;
@@ -28,7 +29,10 @@ PYBIND11_MODULE(core_engine, m) {
         .def("ToString", &GameInterface::ToString);
 
     py::class_<GoGame, GameInterface>(m, "GoGame")
-        .def(py::init<int>(), py::arg("board_size"));
+        .def(py::init<int, float, float>(), py::arg("board_size"), py::arg("dir_epsilon")=0.25f, py::arg("dir_alpha")=0.03f);
+
+    py::class_<GomokuGame, GameInterface>(m, "GomokuGame")
+        .def(py::init<int, float, float>(), py::arg("board_size"), py::arg("dir_epsilon")=0.25f, py::arg("dir_alpha")=0.03f);
 
     py::class_<MCTS>(m, "MCTS")
         .def(py::init<EvalCallback, int, float>(), 
