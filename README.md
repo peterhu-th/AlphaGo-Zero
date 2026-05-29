@@ -25,15 +25,15 @@ AlphaGo/
 │   ├── games/GoGame.h/cpp  # 围棋/五子棋 等具体游戏规则实现
 │   ├── MCTS.h/cpp          # 蒙特卡洛树搜索算法（附带 Dirichlet 噪声及复用逻辑）
 │   └── Pybind_wrapper.cpp  # Python 包装器，将 C++ 类导出给 Python 
-├── python_nn/              # 神经网络：用于评估盘面价值和输出走棋概率
+├── nn/                     # 神经网络：用于评估盘面价值和输出走棋概率
 │   ├── DualResNet.py       # 包含了策略头(Policy Head)与价值头(Value Head)的残差网络
 │   └── ModelManager.py     # 模型生命周期管理，提供给 MCTS 供 C++ 端回调评估
-├── python_train/           # 强化学习流水线
+├── train/                  # 强化学习流水线
 │   ├── Evaluate.py         # 新旧模型对抗评估机制
 │   ├── ReplayBuffer.py     # 经验回放池，用于打乱训练数据增强泛化
 │   ├── SelfPlayWorker.py   # 自对弈工作进程，利用 MCTS 搜集落子数据
 │   └── Train.py            # 训练核心入口：自对弈 -> 经验回放池 -> 模型更新循环
-├── api_frontend/           # 交互端
+├── frontend/               # 交互端
 │   └── GameServer.py       # 人机对弈命令行终端
 ├── config/                 # 配置文件目录
 │   └── Config.yaml         # 控制棋盘尺寸、神经网络深度、MCTS模拟次数等超参
@@ -57,7 +57,7 @@ mv core_engine*.so lib/
 ### 自对弈训练
 执行以下命令，程序将开始长期的自对弈搜集数据并更新模型：
 ```bash
-python python_train/Train.py
+python train/Train.py
 ```
 > 训练的权重将保存在 `weights/` 目录，训练日志会输出到控制台并记录于 `logs/train_log.txt` 中。
 

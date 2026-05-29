@@ -8,6 +8,7 @@ mcts_params:
   c_puct: 1.5
   dirichlet_epsilon: 0.25
   dirichlet_alpha: 0.3
+  temperature_threshold: 15
 
 network_params:
   num_residual_blocks: 10
@@ -19,3 +20,8 @@ train_params:
   num_epochs: 100
   eval_win_rate_threshold: 0.55
   replay_buffer_size: 100000
+  momentum: 0.9
+  weight_decay: 0.0001
+  initial_population: 1000
+  num_iterations: 100
+  num_eval_games: 10

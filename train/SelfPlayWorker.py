@@ -5,7 +5,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'lib'))
 
 import core_engine
-from python_nn.ModelManager import ModelManager
+from nn.ModelManager import ModelManager
 
 class SelfPlayWorker:
     def __init__(self, config, model_manager, mode="go"):
@@ -15,6 +15,7 @@ class SelfPlayWorker:
         self.board_size = config['env_params']['board_size']
         self.num_simulations = config['mcts_params']['num_simulations']
         self.c_puct = config['mcts_params']['c_puct']
+        self.temperature_threshold = config['mcts_params'].get('temperature_threshold', 30)
 
     def play_one_game(self):
         dir_eps = self.config['mcts_params']['dirichlet_epsilon']
@@ -32,7 +33,7 @@ class SelfPlayWorker:
 
         step_count = 0
         while True:
-            temp = 1.0 if step_count < 30 else 0.0
+            temp = 1.0 if step_count < self.temperature_threshold else 0.0
             
             action_prob = mcts.GetActionProb(game, temp)
 

@@ -6,7 +6,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'lib'))
 
 import core_engine
-from python_nn.ModelManager import ModelManager
+from nn.ModelManager import ModelManager
 import yaml
 
 class Evaluator:

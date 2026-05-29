@@ -10,7 +10,7 @@ sys.path.append(root_dir)
 sys.path.append(os.path.join(root_dir, 'lib'))
 
 import core_engine
-from python_nn.ModelManager import ModelManager
+from nn.ModelManager import ModelManager
 
 class HumanVsAIGame:
     def __init__(self, config_path, mode="go"):
@@ -50,7 +50,7 @@ class HumanVsAIGame:
     def print_board(self):
         print("\n" + "="*30)
         cols = " ".join([chr(ord('A') + i) for i in range(self.board_width)])
-        print("    " + cols)
+        print("   " + cols)
         
         board_str = self.game.ToString().split('\n')
         row_idx = 1

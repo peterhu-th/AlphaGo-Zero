@@ -4,6 +4,7 @@
 #include <vector>
 #include <unordered_set>
 #include <set>
+#include <deque>
 
 class GoGame : public GameInterface {
 public:
@@ -29,9 +30,10 @@ private:
     int action_size_;
     Player current_player_;
     std::vector<Player> board_;
+    std::deque<std::vector<Player>> history_;
     
     // 用于打劫检测的哈希记录
-    std::unordered_set<std::string> previous_states_;
+    std::set<std::string> previous_states_;
     
     // 连续 pass 次数
     int pass_count_;

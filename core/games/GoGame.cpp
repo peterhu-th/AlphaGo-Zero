@@ -21,6 +21,8 @@ void GoGame::Reset() {
     current_player_ = Player::Black;
     previous_states_.clear();
     previous_states_.insert(GetBoardHash());
+    history_.clear();
+    history_.push_back(board_);
     pass_count_ = 0;
 }
 
@@ -49,6 +51,8 @@ Player GoGame::Step(int action) {
         pass_count_++;
         current_player_ = (current_player_ == Player::Black) ? Player::White : Player::Black;
         previous_states_.insert(GetBoardHash());
+        history_.push_back(board_);
+        if (history_.size() > 4) history_.pop_front();
         return current_player_;
     }
 
@@ -59,6 +63,8 @@ Player GoGame::Step(int action) {
         // 非法动作，这里简化处理，直接 PASS
         pass_count_++;
         current_player_ = (current_player_ == Player::Black) ? Player::White : Player::Black;
+        history_.push_back(board_);
+        if (history_.size() > 4) history_.pop_front();
         return current_player_;
     }
 
@@ -83,6 +89,8 @@ Player GoGame::Step(int action) {
     }
 
     previous_states_.insert(GetBoardHash());
+    history_.push_back(board_);
+    if (history_.size() > 4) history_.pop_front();
     current_player_ = opponent;
     return current_player_;
 }
@@ -277,14 +285,30 @@ float GoGame::CalculateScore() const {
 }
 
 std::vector<float> GoGame::GetStateFeatures() const {
-    // 为了网络输入，生成特征平面，通道0: 当前玩家的子, 通道1: 对方玩家的子, 通道2: 当前玩家颜色
-    std::vector<float> features(3 * board_size_ * board_size_, 0.0f);
+    // 通道数为 9: 最近4步的当前玩家棋子(0-3), 最近4步的对手棋子(4-7), 当前玩家颜色(8)
+    std::vector<float> features(9 * board_size_ * board_size_, 0.0f);
     Player opponent = (current_player_ == Player::Black) ? Player::White : Player::Black;
+
+    int hist_size = history_.size();
     
+    for (int t = 0; t < 4; ++t) {
+        // 从最新的开始倒推
+        int hist_idx = hist_size - 1 - t;
+        if (hist_idx >= 0) {
+            const auto& b = history_[hist_idx];
+            int offset_current = t * board_size_ * board_size_;
+            int offset_opponent = (4 + t) * board_size_ * board_size_;
+            
+            for (int i = 0; i < board_size_ * board_size_; ++i) {
+                if (b[i] == current_player_) features[offset_current + i] = 1.0f;
+                if (b[i] == opponent) features[offset_opponent + i] = 1.0f;
+            }
+        }
+    }
+    
+    int offset_color = 8 * board_size_ * board_size_;
     for (int i = 0; i < board_size_ * board_size_; ++i) {
-        if (board_[i] == current_player_) features[i] = 1.0f;
-        if (board_[i] == opponent) features[board_size_ * board_size_ + i] = 1.0f;
-        features[2 * board_size_ * board_size_ + i] = (current_player_ == Player::Black) ? 1.0f : 0.0f;
+        features[offset_color + i] = (current_player_ == Player::Black) ? 1.0f : 0.0f;
     }
     return features;
 }
@@ -294,17 +318,14 @@ std::unique_ptr<GameInterface> GoGame::Clone() const {
     clone->board_ = this->board_;
     clone->current_player_ = this->current_player_;
     clone->previous_states_ = this->previous_states_;
+    clone->history_ = this->history_;
     clone->pass_count_ = this->pass_count_;
     return clone;
 }
 
 std::string GoGame::ToString() const {
     std::stringstream ss;
-    ss << "  ";
-    for(int i=0; i<board_size_; ++i) ss << i << " ";
-    ss << "\n";
     for (int x = 0; x < board_size_; ++x) {
-        ss << x << " ";
         for (int y = 0; y < board_size_; ++y) {
             int idx = x * board_size_ + y;
             if (board_[idx] == Player::Black) ss << "X ";
