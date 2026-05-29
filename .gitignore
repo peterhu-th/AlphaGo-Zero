@@ -1,0 +1,23 @@
+# 虚拟环境和编译产物
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+miniconda3/
+
+# 构建产物
+build/
+lib/
+core_engine*.so
+
+# 日志和权重文件
+logs/
+weights/
+
+# IDE 和操作系统文件
+.vscode/
+.idea/
+*.DS_Store
