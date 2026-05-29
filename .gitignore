@@ -21,3 +21,7 @@ weights/
 .vscode/
 .idea/
 *.DS_Store
+
+# 论文
+articles/
+*.pdf
