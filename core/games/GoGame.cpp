@@ -1,10 +1,49 @@
 #include "GoGame.h"
 #include <iostream>
 #include <sstream>
-#include <queue>
 #include <algorithm>
+#include <random>
+#include <mutex>
 
-GoGame::GoGame(int board_size, float dir_epsilon, float dir_alpha) : board_size_(board_size), dir_epsilon_(dir_epsilon), dir_alpha_(dir_alpha), action_size_(board_size * board_size + 1) {
+namespace {
+    uint64_t zobrist_table[361][2];
+    uint64_t zobrist_black_to_move;
+
+    thread_local int visited_[361] = {0};
+    thread_local int bfs_generation_ = 0;
+    thread_local int bfs_queue_[361];
+    
+    inline void IncrementBfs() {
+        if (bfs_generation_ > 2000000000) {
+            bfs_generation_ = 0;
+            std::fill(visited_, visited_ + 361, 0);
+        }
+        bfs_generation_++;
+    }
+
+    void InitZobrist() {
+    static std::once_flag flag;
+    std::call_once(flag, []() {
+        std::mt19937_64 rng(12345);
+        for (int i = 0; i < 361; ++i) {
+            zobrist_table[i][0] = rng(); // 黑
+            zobrist_table[i][1] = rng(); // 白
+        }
+        zobrist_black_to_move = rng();
+    });
+}
+}
+
+GoGame::GoGame(int board_size, float dir_epsilon, float dir_alpha, float komi, int max_moves) : 
+    board_size_(board_size), 
+    dir_epsilon_(dir_epsilon), 
+    dir_alpha_(dir_alpha), 
+    komi_(komi),
+    action_size_(board_size * board_size + 1),
+    max_moves_(max_moves),
+    move_count_(0)
+{
+    InitZobrist();
     Reset();
 }
 
@@ -19,11 +58,14 @@ int GoGame::GetActionSize() const {
 void GoGame::Reset() {
     board_.assign(board_size_ * board_size_, Player::NonePlayer);
     current_player_ = Player::Black;
+    current_hash_ = zobrist_black_to_move;
+    
     previous_states_.clear();
-    previous_states_.insert(GetBoardHash());
+    previous_states_.insert(current_hash_);
     history_.clear();
     history_.push_back(board_);
     pass_count_ = 0;
+    move_count_ = 0;
 }
 
 Player GoGame::GetCurrentPlayer() const {
@@ -32,7 +74,7 @@ Player GoGame::GetCurrentPlayer() const {
 
 std::vector<int> GoGame::GetLegalMoves() const {
     std::vector<int> legal_moves(action_size_, 0);
-    // 检查棋盘上每个点
+    // 遍历棋盘每个点
     for (int i = 0; i < board_size_ * board_size_; ++i) {
         int x = i / board_size_;
         int y = i % board_size_;
@@ -40,17 +82,18 @@ std::vector<int> GoGame::GetLegalMoves() const {
             legal_moves[i] = 1;
         }
     }
-    // PASS 总是合法的
     legal_moves[action_size_ - 1] = 1;
     return legal_moves;
 }
 
 Player GoGame::Step(int action) {
+    move_count_++;
     if (action == action_size_ - 1) {
-        // 执行 PASS
         pass_count_++;
         current_player_ = (current_player_ == Player::Black) ? Player::White : Player::Black;
-        previous_states_.insert(GetBoardHash());
+        current_hash_ ^= zobrist_black_to_move;
+        
+        previous_states_.insert(current_hash_);
         history_.push_back(board_);
         if (history_.size() > 4) history_.pop_front();
         return current_player_;
@@ -60,16 +103,16 @@ Player GoGame::Step(int action) {
     int y = action % board_size_;
 
     if (!IsLegalMove(x, y, current_player_)) {
-        // 非法动作，这里简化处理，直接 PASS
-        pass_count_++;
-        current_player_ = (current_player_ == Player::Black) ? Player::White : Player::Black;
-        history_.push_back(board_);
-        if (history_.size() > 4) history_.pop_front();
-        return current_player_;
+        throw std::runtime_error("Illegal move!");
     }
 
     pass_count_ = 0;
-    board_[action] = current_player_;
+    
+    int idx = x * board_size_ + y;
+    board_[idx] = current_player_;
+    
+    int p_idx = (current_player_ == Player::Black) ? 0 : 1;
+    current_hash_ ^= zobrist_table[idx][p_idx];
     
     // 吃子逻辑
     Player opponent = (current_player_ == Player::Black) ? Player::White : Player::Black;
@@ -80,18 +123,21 @@ Player GoGame::Step(int action) {
         int ny = y + dy[i];
         if (nx >= 0 && nx < board_size_ && ny >= 0 && ny < board_size_) {
             if (board_[nx * board_size_ + ny] == opponent) {
-                std::vector<bool> visited(board_size_ * board_size_, false);
-                if (!HasLiberty(nx, ny, opponent, visited)) {
+                if (!HasLiberty(nx, ny, opponent)) {
                     RemoveDeadStones(nx, ny, opponent);
                 }
             }
         }
     }
 
-    previous_states_.insert(GetBoardHash());
+    // 切换玩家
+    current_player_ = opponent;
+    current_hash_ ^= zobrist_black_to_move;
+
+    previous_states_.insert(current_hash_);
     history_.push_back(board_);
     if (history_.size() > 4) history_.pop_front();
-    current_player_ = opponent;
+    
     return current_player_;
 }
 
@@ -100,51 +146,64 @@ bool GoGame::IsLegalMove(int x, int y, Player player) const {
     if (board_[idx] != Player::NonePlayer) return false;
 
     // 复制一份棋盘用于模拟落子
-    std::vector<Player> temp_board = board_;
+    Player temp_board[361];
+    std::copy(board_.begin(), board_.end(), temp_board);
     temp_board[idx] = player;
 
-    // 模拟吃子
+    uint64_t next_hash = current_hash_;
+    int p_idx = (player == Player::Black) ? 0 : 1;
+    next_hash ^= zobrist_table[idx][p_idx];
+
     Player opponent = (player == Player::Black) ? Player::White : Player::Black;
+    int opp_idx = (opponent == Player::Black) ? 0 : 1;
+    
+    IncrementBfs();
     int dx[] = {-1, 1, 0, 0};
     int dy[] = {0, 0, -1, 1};
-    bool captured_any = false;
 
+    // 模拟吃子
     for (int i = 0; i < 4; ++i) {
         int nx = x + dx[i];
         int ny = y + dy[i];
         if (nx >= 0 && nx < board_size_ && ny >= 0 && ny < board_size_) {
-            if (temp_board[nx * board_size_ + ny] == opponent) {
-                // 判断对方这块棋是否还有气
-                std::vector<bool> visited(board_size_ * board_size_, false);
-                std::queue<std::pair<int, int>> q;
-                q.push({nx, ny});
-                visited[nx * board_size_ + ny] = true;
+            int nidx = nx * board_size_ + ny;
+            if (temp_board[nidx] == opponent && visited_[nidx] != bfs_generation_) {
+                int head = 0, tail = 0;
+                bfs_queue_[tail++] = nidx;
+                visited_[nidx] = bfs_generation_;
+                
                 bool has_liberty = false;
-                std::vector<std::pair<int, int>> block;
+                
+                int block_arr[361];
+                int block_size = 0;
 
-                while (!q.empty()) {
-                    auto [cx, cy] = q.front();
-                    q.pop();
-                    block.push_back({cx, cy});
+                while (head < tail) {
+                    int cidx = bfs_queue_[head++];
+                    block_arr[block_size++] = cidx;
+
+                    int cx = cidx / board_size_;
+                    int cy = cidx % board_size_;
 
                     for (int d = 0; d < 4; ++d) {
                         int nnx = cx + dx[d];
                         int nny = cy + dy[d];
                         if (nnx >= 0 && nnx < board_size_ && nny >= 0 && nny < board_size_) {
-                            if (temp_board[nnx * board_size_ + nny] == Player::NonePlayer) {
+                            int nnidx = nnx * board_size_ + nny;
+                            if (temp_board[nnidx] == Player::NonePlayer) {
                                 has_liberty = true;
-                            } else if (temp_board[nnx * board_size_ + nny] == opponent && !visited[nnx * board_size_ + nny]) {
-                                visited[nnx * board_size_ + nny] = true;
-                                q.push({nnx, nny});
+                            } else if (temp_board[nnidx] == opponent && visited_[nnidx] != bfs_generation_) {
+                                visited_[nnidx] = bfs_generation_;
+                                bfs_queue_[tail++] = nnidx;
                             }
                         }
                     }
                 }
 
                 if (!has_liberty) {
-                    captured_any = true;
-                    for (auto& p : block) {
-                        temp_board[p.first * board_size_ + p.second] = Player::NonePlayer;
+                    for (int k = 0; k < block_size; ++k) {
+                        int bidx = block_arr[k];
+                        temp_board[bidx] = Player::NonePlayer;
+                        next_hash ^= zobrist_table[bidx][opp_idx];
                     }
                 }
             }
@@ -152,69 +211,71 @@ bool GoGame::IsLegalMove(int x, int y, Player player) const {
     }
 
     // 检查自己落子后是否有气（自杀规则禁手）
-    std::vector<bool> visited(board_size_ * board_size_, false);
-    std::queue<std::pair<int, int>> q;
-    q.push({x, y});
-    visited[idx] = true;
+    IncrementBfs();
+    int head = 0, tail = 0;
+    bfs_queue_[tail++] = idx;
+    visited_[idx] = bfs_generation_;
     bool self_has_liberty = false;
 
-    while (!q.empty()) {
-        auto [cx, cy] = q.front();
-        q.pop();
+    while (head < tail) {
+        int cidx = bfs_queue_[head++];
+        int cx = cidx / board_size_;
+        int cy = cidx % board_size_;
 
         for (int d = 0; d < 4; ++d) {
             int nnx = cx + dx[d];
             int nny = cy + dy[d];
             if (nnx >= 0 && nnx < board_size_ && nny >= 0 && nny < board_size_) {
-                if (temp_board[nnx * board_size_ + nny] == Player::NonePlayer) {
+                int nnidx = nnx * board_size_ + nny;
+                if (temp_board[nnidx] == Player::NonePlayer) {
                     self_has_liberty = true;
                     break;
-                } else if (temp_board[nnx * board_size_ + nny] == player && !visited[nnx * board_size_ + nny]) {
-                    visited[nnx * board_size_ + nny] = true;
-                    q.push({nnx, nny});
+                } else if (temp_board[nnidx] == player && visited_[nnidx] != bfs_generation_) {
+                    visited_[nnidx] = bfs_generation_;
+                    bfs_queue_[tail++] = nnidx;
                 }
             }
         }
         if (self_has_liberty) break;
     }
 
-    if (!self_has_liberty) return false; // 自杀动作
+    if (!self_has_liberty) return false;
+
+    next_hash ^= zobrist_black_to_move;
 
     // 打劫规则检查
-    std::string new_hash;
-    for (int i = 0; i < board_size_ * board_size_; ++i) {
-        if (temp_board[i] == Player::Black) new_hash += "B";
-        else if (temp_board[i] == Player::White) new_hash += "W";
-        else new_hash += ".";
-    }
-
-    if (previous_states_.find(new_hash) != previous_states_.end()) {
-        return false; // 重复局面（打劫禁手）
+    if (previous_states_.find(next_hash) != previous_states_.end()) {
+        return false;
     }
 
     return true;
 }
 
-bool GoGame::HasLiberty(int x, int y, Player player, std::vector<bool>& visited) const {
+bool GoGame::HasLiberty(int x, int y, Player player) const {
     int dx[] = {-1, 1, 0, 0};
     int dy[] = {0, 0, -1, 1};
     
-    std::queue<std::pair<int, int>> q;
-    q.push({x, y});
-    visited[x * board_size_ + y] = true;
+    IncrementBfs();
+    int head = 0, tail = 0;
+    int start_idx = x * board_size_ + y;
+    
+    bfs_queue_[tail++] = start_idx;
+    visited_[start_idx] = bfs_generation_;
 
-    while (!q.empty()) {
-        auto [cx, cy] = q.front();
-        q.pop();
+    while (head < tail) {
+        int cidx = bfs_queue_[head++];
+        int cx = cidx / board_size_;
+        int cy = cidx % board_size_;
 
         for (int i = 0; i < 4; ++i) {
             int nx = cx + dx[i];
             int ny = cy + dy[i];
             if (nx >= 0 && nx < board_size_ && ny >= 0 && ny < board_size_) {
-                if (board_[nx * board_size_ + ny] == Player::NonePlayer) return true;
-                if (board_[nx * board_size_ + ny] == player && !visited[nx * board_size_ + ny]) {
-                    visited[nx * board_size_ + ny] = true;
-                    q.push({nx, ny});
+                int nidx = nx * board_size_ + ny;
+                if (board_[nidx] == Player::NonePlayer) return true;
+                if (board_[nidx] == player && visited_[nidx] != bfs_generation_) {
+                    visited_[nidx] = bfs_generation_;
+                    bfs_queue_[tail++] = nidx;
                 }
             }
         }
@@ -225,63 +286,114 @@ bool GoGame::HasLiberty(int x, int y, Player player, std::vector<bool>& visited)
 void GoGame::RemoveDeadStones(int x, int y, Player opponent) {
     int dx[] = {-1, 1, 0, 0};
     int dy[] = {0, 0, -1, 1};
+    int opp_idx = (opponent == Player::Black) ? 0 : 1;
     
-    std::vector<bool> visited(board_size_ * board_size_, false);
-    std::queue<std::pair<int, int>> q;
-    q.push({x, y});
-    visited[x * board_size_ + y] = true;
+    IncrementBfs();
+    int head = 0, tail = 0;
+    int start_idx = x * board_size_ + y;
+    
+    bfs_queue_[tail++] = start_idx;
+    visited_[start_idx] = bfs_generation_;
 
-    while (!q.empty()) {
-        auto [cx, cy] = q.front();
-        q.pop();
-        board_[cx * board_size_ + cy] = Player::NonePlayer;
+    while (head < tail) {
+        int cidx = bfs_queue_[head++];
+        
+        // Remove stone and update hash
+        board_[cidx] = Player::NonePlayer;
+        current_hash_ ^= zobrist_table[cidx][opp_idx];
+
+        int cx = cidx / board_size_;
+        int cy = cidx % board_size_;
 
         for (int i = 0; i < 4; ++i) {
             int nx = cx + dx[i];
             int ny = cy + dy[i];
             if (nx >= 0 && nx < board_size_ && ny >= 0 && ny < board_size_) {
-                if (board_[nx * board_size_ + ny] == opponent && !visited[nx * board_size_ + ny]) {
-                    visited[nx * board_size_ + ny] = true;
-                    q.push({nx, ny});
+                int nidx = nx * board_size_ + ny;
+                if (board_[nidx] == opponent && visited_[nidx] != bfs_generation_) {
+                    visited_[nidx] = bfs_generation_;
+                    bfs_queue_[tail++] = nidx;
                 }
             }
         }
     }
 }
 
-std::string GoGame::GetBoardHash() const {
-    std::string hash;
-    for (int i = 0; i < board_size_ * board_size_; ++i) {
-        if (board_[i] == Player::Black) hash += "B";
-        else if (board_[i] == Player::White) hash += "W";
-        else hash += ".";
-    }
-    return hash;
-}
-
 std::pair<bool, float> GoGame::GetGameEnded() const {
-    if (pass_count_ >= 2) {
+    if (pass_count_ >= 2 || move_count_ >= max_moves_) {
         float score = CalculateScore();
-        if (score > 0) return {true, 1.0f}; // 黑胜
-        if (score < 0) return {true, -1.0f}; // 白胜
-        return {true, 0.0f}; // 平局
+        float reward = 0.0f;
+        
+        if (score > 0) reward = 1.0f;           // 黑胜
+        else if (score < 0) reward = -1.0f;     // 白胜
+
+        if (current_player_ == Player::White) {
+            reward = -reward;
+        }
+        
+        return {true, reward};
     }
     return {false, 0.0f};
 }
 
 float GoGame::CalculateScore() const {
-    // 简化的 Tromp-Taylor 规则：计算占据和包围的空点
     int black_score = 0;
     int white_score = 0;
-    
-    // 省略复杂的连通分量染色，仅做最简单的占有计算。
-    // 在真正的比赛中应当计算气或用flood-fill算地。
+
+    // 1. 计算盘面实子
     for (int i = 0; i < board_size_ * board_size_; ++i) {
         if (board_[i] == Player::Black) black_score++;
         else if (board_[i] == Player::White) white_score++;
     }
-    // 扣除贴目，如果是 9x9 可以是 7.5 或者 0。这里简化为 0 或者后续配置。
-    return static_cast<float>(black_score - white_score);
+
+    // 2. Flood-fill 围空计算
+    IncrementBfs();
+    int dx[] = {-1, 1, 0, 0};
+    int dy[] = {0, 0, -1, 1};
+
+    for (int i = 0; i < board_size_ * board_size_; ++i) {
+        if (board_[i] == Player::NonePlayer && visited_[i] != bfs_generation_) {
+            int head = 0, tail = 0;
+            bfs_queue_[tail++] = i;
+            visited_[i] = bfs_generation_;
+
+            int empty_count = 0;
+            bool touches_black = false;
+            bool touches_white = false;
+
+            while (head < tail) {
+                int cidx = bfs_queue_[head++];
+                empty_count++;
+
+                int cx = cidx / board_size_;
+                int cy = cidx % board_size_;
+
+                for (int d = 0; d < 4; ++d) {
+                    int nx = cx + dx[d];
+                    int ny = cy + dy[d];
+                    if (nx >= 0 && nx < board_size_ && ny >= 0 && ny < board_size_) {
+                        int nidx = nx * board_size_ + ny;
+                        if (board_[nidx] == Player::Black) {
+                            touches_black = true;
+                        } else if (board_[nidx] == Player::White) {
+                            touches_white = true;
+                        } else if (board_[nidx] == Player::NonePlayer && visited_[nidx] != bfs_generation_) {
+                            visited_[nidx] = bfs_generation_;
+                            bfs_queue_[tail++] = nidx;
+                        }
+                    }
+                }
+            }
+
+            if (touches_black && !touches_white) {
+                black_score += empty_count;
+            } else if (touches_white && !touches_black) {
+                white_score += empty_count;
+            }
+        }
+    }
+
+    return static_cast<float>(black_score) - (static_cast<float>(white_score) + komi_);
 }
 
 std::vector<float> GoGame::GetStateFeatures() const {
@@ -314,12 +426,14 @@ std::vector<float> GoGame::GetStateFeatures() const {
 }
 
 std::unique_ptr<GameInterface> GoGame::Clone() const {
-    auto clone = std::make_unique<GoGame>(board_size_, dir_epsilon_, dir_alpha_);
+    auto clone = std::make_unique<GoGame>(board_size_, dir_epsilon_, dir_alpha_, komi_, max_moves_);
     clone->board_ = this->board_;
     clone->current_player_ = this->current_player_;
     clone->previous_states_ = this->previous_states_;
+    clone->current_hash_ = this->current_hash_;
     clone->history_ = this->history_;
     clone->pass_count_ = this->pass_count_;
+    clone->move_count_ = this->move_count_;
     return clone;
 }
 

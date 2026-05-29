@@ -24,11 +24,13 @@ class Trainer:
             self.config = yaml.safe_load(f)
             
         self.model_manager = ModelManager(self.config)
-        self.optimizer = optim.SGD(self.model_manager.model.parameters(), 
-                                   lr=self.config['train_params']['learning_rate'], 
-                                   momentum=self.config['train_params'].get('momentum', 0.9), 
-                                   weight_decay=self.config['train_params'].get('weight_decay', 1e-4))
-        
+        # self.optimizer = optim.SGD(self.model_manager.model.parameters(), 
+        #                            lr=self.config['train_params']['learning_rate'], 
+        #                            momentum=self.config['train_params'].get('momentum', 0.9), 
+        #                            weight_decay=self.config['train_params'].get('weight_decay', 1e-4))
+        self.optimizer = optim.AdamW(self.model_manager.model.parameters(),
+                                    lr=self.config['train_params'].get('learning_rate', 1e-3),
+                                    weight_decay=self.config['train_params'].get('weight_decay', 1e-4))
         self.replay_buffer = ReplayBuffer(self.config['train_params']['replay_buffer_size'])
         self.worker = SelfPlayWorker(self.config, self.model_manager, self.mode)
         
@@ -54,7 +56,6 @@ class Trainer:
     def train_step(self):
         batch_size = self.config['train_params']['batch_size']
         if len(self.replay_buffer) < batch_size:
-            logging.warning("Not enough data to train.")
             return
 
         states, probs, winners = self.replay_buffer.sample(batch_size)
@@ -107,7 +108,6 @@ class Trainer:
                     logging.info(f"Epoch {epoch+1}: Total Loss={t_loss:.4f}, Value Loss={v_loss:.4f}, Policy Loss={p_loss:.4f}")
             
             self.model_manager.save_model(temp_model_path)
-            logging.info("Candidate model saved. Evaluating against best model...")
             
             evaluator = Evaluator(os.path.join(root_dir, 'config', f'{self.mode}.yaml'), self.mode)
             evaluator.load_models(self.best_model_path, temp_model_path)
@@ -116,10 +116,10 @@ class Trainer:
             is_better = evaluator.evaluate(num_games=num_eval_games)
             
             if is_better:
-                logging.info(f"Candidate model passed the evaluation! Replacing {self.best_model_path}")
+                logging.info(f"Candidate model passed the evaluation! Replacing {self.best_model_path}\n")
                 shutil.move(temp_model_path, self.best_model_path)
             else:
-                logging.info("Candidate model rejected. Reverting weights...")
+                logging.info("Candidate model rejected. Reverting weights...\n")
                 self.model_manager.load_model(self.best_model_path)
                 if os.path.exists(temp_model_path):
                     os.remove(temp_model_path)

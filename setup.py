@@ -14,11 +14,11 @@ class get_pybind_include(object):
 ext_modules = [
     Extension(
         'core_engine',
-        ['cpp_core/Pybind_wrapper.cpp', 'cpp_core/MCTS.cpp', 'cpp_core/games/GoGame.cpp', 'cpp_core/games/GomokuGame.cpp'],
+        ['core/Pybind_wrapper.cpp', 'core/MCTS.cpp', 'core/games/GoGame.cpp', 'core/games/GomokuGame.cpp'],
         include_dirs=[
             get_pybind_include(),
             get_pybind_include(user=True),
-            'cpp_core'
+            'core'
         ],
         language='c++',
         extra_compile_args=['-std=c++17', '-O3', '-Wall']

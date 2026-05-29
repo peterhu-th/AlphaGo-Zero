@@ -21,7 +21,9 @@ class SelfPlayWorker:
         dir_eps = self.config['mcts_params']['dirichlet_epsilon']
         dir_alpha = self.config['mcts_params']['dirichlet_alpha']
         if self.mode == 'go':
-            game = core_engine.GoGame(self.board_size, dir_eps, dir_alpha)
+            komi = self.config['env_params'].get('komi', 7.5)
+            max_moves = self.config['env_params'].get('max_moves', 60)
+            game = core_engine.GoGame(self.board_size, dir_eps, dir_alpha, komi, max_moves)
         else:
             game = core_engine.GomokuGame(self.board_size, dir_eps, dir_alpha)
 

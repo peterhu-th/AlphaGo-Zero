@@ -29,7 +29,7 @@ PYBIND11_MODULE(core_engine, m) {
         .def("ToString", &GameInterface::ToString);
 
     py::class_<GoGame, GameInterface>(m, "GoGame")
-        .def(py::init<int, float, float>(), py::arg("board_size"), py::arg("dir_epsilon")=0.25f, py::arg("dir_alpha")=0.03f);
+        .def(py::init<int, float, float, float, int>(), py::arg("board_size"), py::arg("dir_epsilon")=0.25f, py::arg("dir_alpha")=0.03f, py::arg("komi")=3.5f, py::arg("max_moves")=60);
 
     py::class_<GomokuGame, GameInterface>(m, "GomokuGame")
         .def(py::init<int, float, float>(), py::arg("board_size"), py::arg("dir_epsilon")=0.25f, py::arg("dir_alpha")=0.03f);

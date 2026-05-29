@@ -19,7 +19,7 @@ public:
     // 获取棋盘的尺寸
     virtual std::pair<int, int> GetBoardSize() const = 0;
 
-    // 获取动作空间大小（例如棋盘大小 + 1，即包含 PASS 动作）
+    // 获取动作空间大小
     virtual int GetActionSize() const = 0;
 
     // 初始化/获取初始状态
@@ -32,11 +32,10 @@ public:
     virtual Player Step(int action) = 0;
 
     // 判断游戏是否结束，并返回终局奖励
-    // 第一项表示是否终局，第二项表示相对于当前玩家的奖励
-    // 在这里我们定义：1.0表示黑胜，-1.0表示白胜，0.0表示平局
+    // 是否终局，相对于当前玩家的奖励: 1.0表示黑胜，-1.0表示白胜，0.0表示平局
     virtual std::pair<bool, float> GetGameEnded() const = 0;
 
-    // 获取当前状态的特征表示（用于输入神经网络）
+    // 获取当前状态的特征表示
     virtual std::vector<float> GetStateFeatures() const = 0;
 
     // 获取当前执子的玩家
@@ -48,6 +47,6 @@ public:
     // 将棋盘状态转换为字符串
     virtual std::string ToString() const = 0;
 
-    // 获取游戏特有的狄利克雷噪声参数 (epsilon, alpha)
+    // 获取狄利克雷噪声 (epsilon, alpha)
     virtual std::pair<float, float> GetDirichletParams() const = 0;
 };

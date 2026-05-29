@@ -29,7 +29,12 @@ class HumanVsAIGame:
                 print(f"Loading latest model: {latest_model}")
                 self.model_manager.load_model(latest_model)
             else:
-                print(f"No trained models found in {weights_dir}. Using random weights.")
+                best_model = os.path.join(weights_dir, "best_model.pt")
+                if os.path.exists(best_model):
+                    print(f"Loading best model: {best_model}")
+                    self.model_manager.load_model(best_model)
+                else:
+                    print(f"No trained models found in {weights_dir}. Using random weights.")
         else:
             print(f"{weights_dir} directory not found. Using random weights.")
         
@@ -39,7 +44,9 @@ class HumanVsAIGame:
         dir_alpha = self.config['mcts_params']['dirichlet_alpha']
         
         if self.mode == 'go':
-            self.game = core_engine.GoGame(self.board_width, dir_eps, dir_alpha)
+            komi = self.config['env_params'].get('komi', 7.5)
+            max_moves = self.config['env_params'].get('max_moves', 60)
+            self.game = core_engine.GoGame(self.board_width, dir_eps, dir_alpha, komi, max_moves)
         else:
             self.game = core_engine.GomokuGame(self.board_width, dir_eps, dir_alpha)
         

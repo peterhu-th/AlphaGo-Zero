@@ -27,7 +27,9 @@ class Evaluator:
         dir_alpha = self.config['mcts_params']['dirichlet_alpha']
         
         if self.mode == 'go':
-            game = core_engine.GoGame(self.config['env_params']['board_size'], dir_eps, dir_alpha)
+            komi = self.config['env_params'].get('komi', 7.5)
+            max_moves = self.config['env_params'].get('max_moves', 60)
+            game = core_engine.GoGame(self.config['env_params']['board_size'], dir_eps, dir_alpha, komi, max_moves)
         else:
             game = core_engine.GomokuGame(self.config['env_params']['board_size'], dir_eps, dir_alpha)
         
@@ -43,18 +45,28 @@ class Evaluator:
         black_mcts = core_engine.MCTS(black_eval, num_sim, c_puct)
         white_mcts = core_engine.MCTS(white_eval, num_sim, c_puct)
 
+        eval_temp_threshold = self.config['train_params'].get('eval_temp_threshold', 4)
+        move_num = 0
+        
         while True:
             current_player = game.GetCurrentPlayer()
+            temp = 1.0 if move_num < eval_temp_threshold else 0.0
             if current_player == core_engine.Player.Black:
-                action_prob = black_mcts.GetActionProb(game, 0.0) 
+                action_prob = black_mcts.GetActionProb(game, temp) 
             else:
-                action_prob = white_mcts.GetActionProb(game, 0.0)
+                action_prob = white_mcts.GetActionProb(game, temp)
 
             import numpy as np
-            action = np.argmax(action_prob)
+            if temp == 0.0:
+                action = np.argmax(action_prob)
+            else:
+                action_prob = np.array(action_prob, dtype=np.float64)
+                action_prob /= np.sum(action_prob) 
+                action = np.random.choice(len(action_prob), p=action_prob)
             game.Step(int(action))
             black_mcts.UpdateWithMove(int(action))
             white_mcts.UpdateWithMove(int(action))
+            move_num += 1
 
             is_ended, reward = game.GetGameEnded()
             if is_ended:
@@ -78,7 +90,7 @@ class Evaluator:
             res = self.play_match(current_best_is_black)
             if res == 1:
                 candidate_wins += 1
-            print(f"Game {i+1} completed, candidate win: {res == 1}")
+            print(f"Game {i+1}: candidate win: {res == 1}")
         
         win_rate = candidate_wins / num_games
         print(f"Candidate win rate: {win_rate:.2f}")

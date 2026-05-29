@@ -3,12 +3,12 @@
 #include "../GameInterface.h"
 #include <vector>
 #include <unordered_set>
-#include <set>
 #include <deque>
+#include <stdexcept>
 
 class GoGame : public GameInterface {
 public:
-    GoGame(int board_size, float dir_epsilon = 0.25f, float dir_alpha = 0.03f);
+    GoGame(int board_size, float dir_epsilon = 0.25f, float dir_alpha = 0.03f, float komi = 3.5f, int max_moves = 60);
     ~GoGame() override = default;
 
     std::pair<int, int> GetBoardSize() const override;
@@ -27,21 +27,24 @@ private:
     int board_size_;
     float dir_epsilon_;
     float dir_alpha_;
+    float komi_;
     int action_size_;
+    int max_moves_;
+    int move_count_;
     Player current_player_;
     std::vector<Player> board_;
     std::deque<std::vector<Player>> history_;
     
-    // 用于打劫检测的哈希记录
-    std::set<std::string> previous_states_;
+    // Zobrist Hashing
+    std::unordered_set<uint64_t> previous_states_;
+    uint64_t current_hash_;
     
     // 连续 pass 次数
     int pass_count_;
     
     // 内部方法
     bool IsLegalMove(int x, int y, Player player) const;
-    bool HasLiberty(int x, int y, Player player, std::vector<bool>& visited) const;
+    bool HasLiberty(int x, int y, Player player) const;
     void RemoveDeadStones(int x, int y, Player opponent);
-    std::string GetBoardHash() const;
-    float CalculateScore() const; // Tromp-Taylor 规则算分
+    float CalculateScore() const; // Tromp-Taylor flood-fill
 };
