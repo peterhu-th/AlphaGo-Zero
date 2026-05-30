@@ -12,6 +12,7 @@ miniconda3/
 build/
 lib/
 core_engine*.so
+.eggs/
 
 # 日志和权重文件
 logs/
