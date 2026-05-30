@@ -46,7 +46,7 @@ AlphaGo/
 ### 编译 C++ 扩展
 在 Conda 虚拟环境中，使用以下命令编译加速引擎，并将其移动到 `lib/` 目录供 Python 调用：
 ```bash
-python setup.py build_ext --inplace
+pip install -e .
 mkdir -p lib
 mv core_engine*.so lib/
 ```

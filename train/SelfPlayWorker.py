@@ -1,5 +1,7 @@
 import sys
 import os
+import numpy as np
+import logging
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'lib'))
@@ -17,6 +19,40 @@ class SelfPlayWorker:
         self.c_puct = config['mcts_params']['c_puct']
         self.temperature_threshold = config['mcts_params'].get('temperature_threshold', 30)
 
+
+    def get_symmetries(self, state_flat, pi_flat, z, in_channels):
+        board_size = self.board_size
+        # 将 1D 列表重塑为 3D numpy 数组 (channels, height, width)
+        state = np.array(state_flat).reshape(in_channels, board_size, board_size)
+        pi = np.array(pi_flat)
+        
+        # 剥离 PASS 动作，将落子概率重塑为 2D 棋盘形状
+        pi_board = pi[:-1].reshape(board_size, board_size)
+        pi_pass = pi[-1]
+        
+        symm_data = []
+        
+        # 4 种旋转: 0度, 90度, 180度, 270度
+        for i in range(4):
+            s_rot = np.rot90(state, k=i, axes=(1, 2))
+            p_rot = np.rot90(pi_board, k=i)
+            
+            # 2 种镜像: 原图, 水平翻转
+            for flip in [False, True]:
+                if flip:
+                    s_trans = np.flip(s_rot, axis=2)
+                    p_trans = np.fliplr(p_rot)
+                else:
+                    s_trans = s_rot
+                    p_trans = p_rot
+                    
+                # 展平策略，并把 PASS 动作加回末尾
+                p_final = np.append(p_trans.flatten(), pi_pass)
+                symm_data.append((s_trans.flatten().tolist(), p_final.tolist(), z))
+                
+        return symm_data
+
+
     def play_one_game(self):
         dir_eps = self.config['mcts_params']['dirichlet_epsilon']
         dir_alpha = self.config['mcts_params']['dirichlet_alpha']
@@ -27,7 +63,10 @@ class SelfPlayWorker:
         else:
             game = core_engine.GomokuGame(self.board_size, dir_eps, dir_alpha)
 
-        mcts = core_engine.MCTS(self.model_manager.evaluate, self.num_simulations, self.c_puct)
+        batch_size = self.config['mcts_params'].get('virtual_loss_batch_size', 8)
+        virtual_loss = self.config['mcts_params'].get('virtual_loss', 3.0)
+        mcts = core_engine.MCTS(self.model_manager.evaluate, self.num_simulations, self.c_puct, batch_size, virtual_loss)
+        
 
         states = []
         search_probs = []
@@ -64,14 +103,19 @@ class SelfPlayWorker:
             is_ended, reward = game.GetGameEnded()
             if is_ended:
                 winner = None
+                current_player = game.GetCurrentPlayer()
                 if reward > 0.5:
-                    winner = core_engine.Player.Black
+                    winner = current_player
                 elif reward < -0.5:
-                    winner = core_engine.Player.White
+                    winner = core_engine.Player.White if current_player == core_engine.Player.Black else core_engine.Player.Black
                 else:
                     winner = core_engine.Player.NonePlayer
                 
+                logging.info(f"Game finished in {step_count} moves. Winner: {winner}")
+                
                 game_data = []
+                in_channels = self.config['env_params']['in_channels']
+
                 for s, prob, p in zip(states, search_probs, players):
                     if winner == core_engine.Player.NonePlayer:
                         z = 0.0
@@ -79,6 +123,7 @@ class SelfPlayWorker:
                         z = 1.0
                     else:
                         z = -1.0
-                    game_data.append((s, prob, z))
+                    symm_samples = self.get_symmetries(s, prob, z, in_channels)
+                    game_data.extend(symm_samples)
                 
                 return game_data

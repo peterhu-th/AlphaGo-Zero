@@ -2,8 +2,8 @@ env_params:
   board_size: 9
   action_size: 82
   in_channels: 9
-  komi: 7.5
-  max_moves: 150
+  komi: 9.5
+  max_moves: 180
 
 mcts_params:
   num_simulations: 400
@@ -11,6 +11,7 @@ mcts_params:
   dirichlet_epsilon: 0.25
   dirichlet_alpha: 0.13
   temperature_threshold: 30
+  virtual_loss_batch_size: 8
 
 network_params:
   num_residual_blocks: 10
@@ -18,12 +19,13 @@ network_params:
 
 train_params:
   batch_size: 256
-  learning_rate: 0.0005
-  num_epochs: 2
+  learning_rate: 0.001
+  num_epochs: 5
   eval_win_rate_threshold: 0.55
-  replay_buffer_size: 100000
+  replay_buffer_size: 50000
   momentum: 0.9
   weight_decay: 0.0001
   initial_population: 300
   num_iterations: 100
+  num_games_per_iteration: 10
   num_eval_games: 10

@@ -33,19 +33,21 @@ class ModelManager:
         else:
             print(f"Path {path} does not exist, starting with random weights.")
 
-    def evaluate(self, state_features):
+    def evaluate(self, batched_state_features):
         """
-        供 C++ MCTS 回调使用的单例推理函数。
-        状态特征输入为 1D 列表，长度为 in_channels * board_height * board_width
-        返回值为: (概率分布向量 list, 价值标量 float)
+        供 C++ MCTS 回调使用的批量推理函数。
+        输入为 2D 列表 (Batch Size, in_channels * board_height * board_width)
+        返回值为: (批概率分布 list of lists, 批价值标量 list of floats)
         """
-        # 将 1D 列表重塑为 (1, Channels, Height, Width)
-        tensor_state = torch.FloatTensor(state_features).view(1, self.in_channels, self.board_height, self.board_width).to(self.device)
+        N = len(batched_state_features)
+        if N == 0:
+            return [], []
+            
+        tensor_state = torch.FloatTensor(batched_state_features).view(N, self.in_channels, self.board_height, self.board_width).to(self.device)
         
         with torch.no_grad():
             log_pi, v = self.model(tensor_state)
-            # 还原为概率
-            pi = torch.exp(log_pi).cpu().numpy().flatten().tolist()
-            value = v.item()
+            pi = torch.exp(log_pi).cpu().numpy().tolist()
+            value = v.cpu().numpy().flatten().tolist()
             
         return pi, value

@@ -35,10 +35,8 @@ PYBIND11_MODULE(core_engine, m) {
         .def(py::init<int, float, float>(), py::arg("board_size"), py::arg("dir_epsilon")=0.25f, py::arg("dir_alpha")=0.03f);
 
     py::class_<MCTS>(m, "MCTS")
-        .def(py::init<EvalCallback, int, float>(), 
-             py::arg("eval_fn"), py::arg("num_simulations"), py::arg("c_puct"))
-        .def("GetActionProb", &MCTS::GetActionProb, 
-             py::arg("game"), py::arg("temp") = 1.0f)
-        .def("UpdateWithMove", &MCTS::UpdateWithMove, 
-             py::arg("last_action"));
+        .def(py::init<std::function<std::pair<std::vector<std::vector<float>>, std::vector<float>>(const std::vector<std::vector<float>>&)>, int, float, int, float>(), 
+            py::arg("eval_fn"), py::arg("num_simulations"), py::arg("c_puct"), py::arg("virtual_loss_batch_size")=8, py::arg("virtual_loss")=3.0f)
+        .def("GetActionProb", &MCTS::GetActionProb, py::arg("game"), py::arg("temp")=1.0f)
+        .def("UpdateWithMove", &MCTS::UpdateWithMove, py::arg("last_action"));
 }

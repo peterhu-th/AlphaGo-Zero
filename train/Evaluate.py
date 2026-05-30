@@ -42,8 +42,10 @@ class Evaluator:
 
         num_sim = self.config['mcts_params']['num_simulations']
         c_puct = self.config['mcts_params']['c_puct']
-        black_mcts = core_engine.MCTS(black_eval, num_sim, c_puct)
-        white_mcts = core_engine.MCTS(white_eval, num_sim, c_puct)
+        batch_size = self.config['mcts_params'].get('virtual_loss_batch_size', 8)
+        virtual_loss = self.config['mcts_params'].get('virtual_loss', 3.0)
+        black_mcts = core_engine.MCTS(black_eval, num_sim, c_puct, batch_size, virtual_loss)
+        white_mcts = core_engine.MCTS(white_eval, num_sim, c_puct, batch_size, virtual_loss)
 
         eval_temp_threshold = self.config['train_params'].get('eval_temp_threshold', 4)
         move_num = 0

@@ -7,7 +7,6 @@ import yaml
 import logging
 import shutil
 
-# 将根目录和 lib 加入 sys.path
 root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(root_dir)
 sys.path.append(os.path.join(root_dir, 'lib'))
@@ -20,6 +19,7 @@ from train.Evaluate import Evaluator
 class Trainer:
     def __init__(self, config_path, mode="go"):
         self.mode = mode
+        self.config_path = config_path
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
             
@@ -45,6 +45,7 @@ class Trainer:
             logging.info(f"No existing model found. Saving initial model as {self.best_model_path}")
             self.model_manager.save_model(self.best_model_path)
         
+
     def collect_selfplay_data(self, num_games):
         logging.info(f"Starting self-play for {num_games} games...")
         for i in range(num_games):
@@ -52,6 +53,7 @@ class Trainer:
             for s, prob, z in game_data:
                 self.replay_buffer.add(s, prob, z)
             logging.info(f"Game {i+1} completed, buffer size: {len(self.replay_buffer)}")
+
 
     def train_step(self):
         batch_size = self.config['train_params']['batch_size']
@@ -85,6 +87,7 @@ class Trainer:
         
         return total_loss.item(), value_loss.item(), policy_loss.item()
 
+
     def pre_populate_buffer(self):
         initial_pop = self.config['train_params'].get('initial_population', self.config['train_params']['batch_size'])
         if len(self.replay_buffer) < initial_pop:
@@ -93,36 +96,51 @@ class Trainer:
                 self.collect_selfplay_data(1)
             logging.info("Pre-population complete.")
 
+
     def run_training_loop(self, iterations):
-        self.pre_populate_buffer()
-        temp_model_path = os.path.join(self.weights_dir, "temp_candidate.pt")
+        # 初始化评估器
+        evaluator = Evaluator(self.config_path, self.mode)
         
         for it in range(iterations):
+            logging.info("")
             logging.info(f"--- Iteration {it+1}/{iterations} ---")
-            self.collect_selfplay_data(2) 
+            num_games = self.config['train_params'].get('num_games_per_iteration', 10)
+            self.collect_selfplay_data(num_games) 
             
-            for epoch in range(self.config['train_params']['num_epochs']):
-                losses = self.train_step()
-                if losses:
-                    t_loss, v_loss, p_loss = losses
-                    logging.info(f"Epoch {epoch+1}: Total Loss={t_loss:.4f}, Value Loss={v_loss:.4f}, Policy Loss={p_loss:.4f}")
-            
+            # 训练前，将当前网络权重先存为临时模型
+            temp_model_path = os.path.join(self.weights_dir, "temp_model.pt")
             self.model_manager.save_model(temp_model_path)
             
-            evaluator = Evaluator(os.path.join(root_dir, 'config', f'{self.mode}.yaml'), self.mode)
+            # 充分训练当前经验池
+            batch_size = self.config['train_params']['batch_size']
+            num_batches = max(1, len(self.replay_buffer) // batch_size)
+            
+            for epoch in range(self.config['train_params']['num_epochs']):
+                total_t, total_v, total_p = 0, 0, 0
+                for _ in range(num_batches):
+                    losses = self.train_step()
+                    if losses:
+                        total_t += losses[0]
+                        total_v += losses[1]
+                        total_p += losses[2]
+                
+                if num_batches > 0:
+                    logging.info(f"Epoch {epoch+1}: Total Loss={total_t/num_batches:.4f}, Value Loss={total_v/num_batches:.4f}, Policy Loss={total_p/num_batches:.4f}")
+
+            # 评估候选模型
+            logging.info("Evaluating candidate model against the best model...")
             evaluator.load_models(self.best_model_path, temp_model_path)
             
             num_eval_games = self.config['train_params'].get('num_eval_games', 10)
-            is_better = evaluator.evaluate(num_games=num_eval_games)
+            is_better = evaluator.evaluate(num_eval_games)
             
             if is_better:
-                logging.info(f"Candidate model passed the evaluation! Replacing {self.best_model_path}\n")
-                shutil.move(temp_model_path, self.best_model_path)
+                logging.warning("Candidate model accepted! Saving as new best model.")
+                self.model_manager.save_model(self.best_model_path)
             else:
-                logging.info("Candidate model rejected. Reverting weights...\n")
+                logging.info("Candidate model rejected. Reverting weights...")
                 self.model_manager.load_model(self.best_model_path)
-                if os.path.exists(temp_model_path):
-                    os.remove(temp_model_path)
+
 
 if __name__ == "__main__":
     import argparse
