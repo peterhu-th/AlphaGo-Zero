@@ -4,11 +4,11 @@ env_params:
   in_channels: 3
 
 mcts_params:
-  num_simulations: 800
+  num_simulations: 400
   c_puct: 1.5
   dirichlet_epsilon: 0.25
-  dirichlet_alpha: 0.3
-  temperature_threshold: 15
+  dirichlet_alpha: 0.04
+  temperature_threshold: 20
 
 network_params:
   num_residual_blocks: 10
@@ -16,12 +16,13 @@ network_params:
 
 train_params:
   batch_size: 256
-  learning_rate: 0.002
-  num_epochs: 100
-  eval_win_rate_threshold: 0.55
+  learning_rate: 0.001
+  num_epochs: 5
+  eval_win_rate_threshold: 0.50
   replay_buffer_size: 100000
   momentum: 0.9
   weight_decay: 0.0001
   initial_population: 1000
   num_iterations: 100
+  num_games_per_iteration: 20
   num_eval_games: 10

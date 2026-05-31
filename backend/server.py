@@ -138,6 +138,7 @@ class GameManager:
         if not self.game:
             return []
         board_str = self.game.ToString()
+        
         state = []
         for char in board_str:
             if char == 'X':
@@ -272,9 +273,11 @@ async def websocket_endpoint(websocket: WebSocket):
                         gm.play_move(ai_move[1], ai_move[0])
                     is_ended, reward = gm.game.GetGameEnded()
                     if is_ended:
+                        is_curr_black = "Black" in str(gm.game.GetCurrentPlayer())
+                        abs_result = reward if is_curr_black else -reward
                         await websocket.send_text(json.dumps(convert_to_builtin({
                             "action": "game_over", 
-                            "result": reward,
+                            "result": abs_result,
                             "board_state": gm.get_board_state()
                         })))
                     else:
@@ -305,9 +308,11 @@ async def websocket_endpoint(websocket: WebSocket):
 
                     is_ended, reward = gm.game.GetGameEnded()
                     if is_ended:
+                        is_curr_black = "Black" in str(gm.game.GetCurrentPlayer())
+                        abs_result = reward if is_curr_black else -reward
                         await websocket.send_text(json.dumps(convert_to_builtin({
                             "action": "game_over", 
-                            "result": reward,
+                            "result": abs_result,
                             "board_state": gm.get_board_state()
                         })))
                         continue
