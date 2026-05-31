@@ -16,7 +16,8 @@ core_engine*.so
 
 # 日志和权重文件
 logs/
-weights/
+
+weights/*/temp_model.pt
 
 # IDE 和操作系统文件
 .vscode/
@@ -29,4 +30,3 @@ articles/
 
 # 记录
 notes.md
-

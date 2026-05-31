@@ -35,19 +35,28 @@ const emit = defineEmits(['move']);
 const boardCanvas = ref<HTMLCanvasElement | null>(null);
 const ctx = ref<CanvasRenderingContext2D | null>(null);
 
-// 棋盘绘制相关常量
-const cellSize = 30; // 每个格子的像素宽度
-const margin = 20; // 棋盘边距
+// 棋盘绘制相关常量配置
+const cellSize = 30; // 网格大小
+const margin = 40;   // 留白大小，拉开文字与棋盘的距离
 
 // 初始化画布
 const initCanvas = () => {
   const canvas = boardCanvas.value;
   if (!canvas) return;
+  // 加上两侧坐标预留边距
   const size = (props.boardSize - 1) * cellSize + margin * 2;
-  canvas.width = size;
-  canvas.height = size;
-  ctx.value = canvas.getContext('2d');
-  draw();
+  const dpr = window.devicePixelRatio || 1;
+  
+  canvas.width = size * dpr;
+  canvas.height = size * dpr;
+  // 移除硬编码的 style 宽高，交由 CSS 控制，实现自由缩放
+  
+  const context = canvas.getContext('2d');
+  if (context) {
+    context.scale(dpr, dpr);
+    ctx.value = context;
+    draw();
+  }
 };
 
 // 绘制星位
@@ -101,6 +110,24 @@ const draw = () => {
     context.moveTo(margin, margin + i * cellSize);
     context.lineTo(margin + (props.boardSize - 1) * cellSize, margin + i * cellSize);
     context.stroke();
+  }
+
+  // 绘制坐标轴 (A-T 省略I，1-19)
+  context.fillStyle = '#666';
+  context.font = '12px Arial';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  const getChar = (idx: number) => {
+    let charCode = 'A'.charCodeAt(0) + idx;
+    if (charCode >= 'I'.charCodeAt(0)) charCode++; // 通常围棋坐标跳过 I
+    return String.fromCharCode(charCode);
+  };
+  
+  for (let i = 0; i < props.boardSize; i++) {
+    // 顶边字母 (距离上方约 margin * 0.4 的位置)
+    context.fillText(getChar(i), margin + i * cellSize, margin * 0.4);
+    // 左边数字
+    context.fillText((props.boardSize - i).toString(), margin * 0.4, margin + i * cellSize);
   }
 
   // 绘制星位
@@ -202,6 +229,7 @@ const handleCanvasClick = (event: MouseEvent) => {
 watch(() => props.boardState, draw, { deep: true });
 watch(() => props.hints, draw, { deep: true });
 watch(() => props.lastMove, draw, { deep: true });
+watch(() => props.boardSize, initCanvas);
 
 onMounted(() => {
   initCanvas();
@@ -218,14 +246,13 @@ onMounted(() => {
   border-radius: 16px;
   box-shadow: 10px 10px 20px #d9d9d9, -10px -10px 20px #ffffff;
   width: 100%;
-  max-width: 650px;
+  aspect-ratio: 1 / 1;
   margin: 0 auto;
 }
 canvas {
   cursor: pointer;
   width: 100%;
   height: auto;
-  max-width: 600px;
   aspect-ratio: 1 / 1;
   border-radius: 4px;
   box-shadow: inset 0 0 10px rgba(0,0,0,0.5), 0 15px 30px rgba(0,0,0,0.3);

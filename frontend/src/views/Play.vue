@@ -7,7 +7,14 @@
           <option value="go">围棋 (Go)</option>
           <option value="gomoku">五子棋 (Gomoku)</option>
         </select>
+        <select v-model="playerColor" @change="initGame">
+          <option :value="1">执黑先手</option>
+          <option :value="2">执白后手</option>
+        </select>
         <button @click="initGame">重新开始</button>
+        <button @click="passMove" :disabled="aiThinking">停一手</button>
+        <button @click="applyScore" :disabled="aiThinking">申请数子</button>
+        <button @click="undoMove" :disabled="aiThinking || moveHistory.length === 0">悔棋</button>
         <label class="switch">
           <input type="checkbox" v-model="aiHintEnabled">
           <span class="slider round"></span>
@@ -32,11 +39,12 @@
       <div class="sidebar">
         <div class="status-panel">
           <h3>游戏状态</h3>
+          <p v-if="mode === 'go'" style="color: #888; font-size: 0.9em; margin-top: -10px;">贴目: {{ komi }}</p>
           <p class="status-text">{{ statusMessage }}</p>
           <p v-if="aiThinking" class="thinking-text">AI 正在思考中...</p>
         </div>
 
-        <div class="win-rate-panel">
+        <div class="win-rate-panel" v-if="aiHintEnabled">
           <h3>黑方胜率估算</h3>
           <div class="progress-bar-container">
             <div class="progress-bar" :style="{ width: winRatePercent + '%' }"></div>
@@ -54,7 +62,9 @@ import Board from '../components/Board.vue';
 
 // 游戏配置
 const mode = ref('go');
+const playerColor = ref(1); // 1: 黑, 2: 白
 const boardSize = ref(19);
+const komi = ref(0);
 const aiHintEnabled = ref(false);
 
 // 游戏状态
@@ -81,7 +91,60 @@ const initBoard = () => {
   currentHints.value = [];
   winRate.value = 0.5;
   moveHistory.value = [];
-  statusMessage.value = '准备就绪，轮到黑方（你）落子';
+  statusMessage.value = playerColor.value === 1 ? '准备就绪，轮到黑方（你）落子' : '准备就绪，等待AI落子';
+};
+
+const undoMove = () => {
+  if (aiThinking.value || moveHistory.value.length === 0) return;
+  const lastMoveObj = moveHistory.value[moveHistory.value.length - 1];
+  
+  if (lastMoveObj.color !== playerColor.value && moveHistory.value.length >= 2) {
+    moveHistory.value.pop();
+    moveHistory.value.pop();
+  } else {
+    moveHistory.value.pop();
+  }
+  
+  // 重构棋盘
+  boardState.value = new Array(boardSize.value * boardSize.value).fill(0);
+  moveHistory.value.forEach(m => {
+    boardState.value[m.y * boardSize.value + m.x] = m.color;
+  });
+  
+  if (moveHistory.value.length > 0) {
+    const m = moveHistory.value[moveHistory.value.length - 1];
+    lastMove.value = { x: m.x, y: m.y };
+  } else {
+    lastMove.value = null;
+  }
+  
+  // 同步给后端
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    const syncHistory = moveHistory.value.map(m => [m.x, m.y]);
+    ws.send(JSON.stringify({ action: 'sync_history', history: syncHistory }));
+  }
+  
+  statusMessage.value = '悔棋成功，轮到你落子';
+  currentHints.value = [];
+};
+
+const passMove = () => {
+  if (aiThinking.value || statusMessage.value.includes('结束')) return;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ action: 'play', move: [-1, -1] }));
+    statusMessage.value = '你选择了停一手，等待 AI 响应...';
+    aiThinking.value = true;
+    currentHints.value = [];
+  }
+};
+
+const applyScore = () => {
+  if (aiThinking.value || statusMessage.value.includes('结束')) return;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ action: 'apply_score' }));
+    statusMessage.value = '正在申请数子并计算胜负...';
+    aiThinking.value = true;
+  }
 };
 
 const initGame = async () => {
@@ -101,43 +164,85 @@ const initGame = async () => {
   ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
     
+    if (data.board_state) {
+      boardState.value = data.board_state;
+    }
+    
     if (data.action === 'ready') {
       if (data.board_size) {
         boardSize.value = data.board_size;
+        komi.value = data.komi || 0;
         initBoard(); // 尺寸更新后重新初始化一次以避免越界
       }
+      if (playerColor.value === 2) {
+        statusMessage.value = 'AI 思考先手...';
+        aiThinking.value = true;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ action: 'ai_move_request' }));
+        }
+      }
+    }
+    else if (data.action === 'sync_board') {
+      // 仅用于同步盘面状态，消除提子等本地难以推演的变化
+    }
+    else if (data.action === 'illegal_move') {
+      aiThinking.value = false;
+      statusMessage.value = '落子非法（打劫或禁手）！请重新落子。';
+      moveHistory.value.pop(); // 撤回刚才加入的历史
+      currentHints.value = [];
     }
     else if (data.action === 'thinking') {
       aiThinking.value = true;
       if (data.win_rate !== undefined) winRate.value = data.win_rate;
       if (data.hints) currentHints.value = data.hints; // 实时提示
-    } 
+    }
     else if (data.action === 'ai_move') {
       aiThinking.value = false;
       const { move, win_rate } = data;
       const [x, y] = move;
-      boardState.value[y * boardSize.value + x] = 2; // 白子
+      const aiColor = playerColor.value === 1 ? 2 : 1;
+      // boardState 的赋值已经被 data.board_state 统一处理
       lastMove.value = { x, y };
       if (win_rate !== undefined) winRate.value = win_rate;
-      moveHistory.value.push({x, y, color: 2, winRate: winRate.value});
-      statusMessage.value = 'AI 落子完毕，轮到你';
+      if (x === -1 && y === -1) {
+        moveHistory.value.push({x, y, color: aiColor, winRate: winRate.value});
+        statusMessage.value = 'AI 选择了停一手，轮到你';
+      } else {
+        moveHistory.value.push({x, y, color: aiColor, winRate: winRate.value});
+        statusMessage.value = 'AI 落子完毕，轮到你';
+      }
       currentHints.value = [];
+    }
+    else if (data.action === 'score_rejected') {
+      aiThinking.value = false;
+      statusMessage.value = data.message;
     }
     else if (data.action === 'game_over') {
       aiThinking.value = false;
-      statusMessage.value = `游戏结束！结果: ${data.result}`;
+      let resText = "平局";
+      if (data.reason) {
+         resText = data.reason;
+      } else if (data.diff !== undefined) {
+         if (data.diff > 0) resText = `黑胜 ${data.diff} 目 (黑${data.b_s} 白${data.w_s}+贴目)`;
+         else if (data.diff < 0) resText = `白胜 ${-data.diff} 目 (白${data.w_s}+贴目 黑${data.b_s})`;
+      } else {
+         if (data.result > 0) resText = "黑棋胜";
+         else if (data.result < 0) resText = "白棋胜";
+      }
+      statusMessage.value = `游戏结束！${resText}`;
       
       // 保存棋谱
       const record = {
         id: Date.now().toString(),
+        date: new Date().toLocaleString(),
         mode: mode.value,
         boardSize: boardSize.value,
-        timestamp: Date.now(),
-        result: data.result,
-        moves: moveHistory.value
+        playerColor: playerColor.value,
+        result: resText,
+        history: moveHistory.value.map(m => [m.x, m.y])
       };
-      const stored = localStorage.getItem('alphago_records') || '[]';
-      const records = JSON.parse(stored);
+      
+      const records = JSON.parse(localStorage.getItem('alphago_records') || '[]');
       records.push(record);
       localStorage.setItem('alphago_records', JSON.stringify(records));
     }
@@ -154,17 +259,19 @@ const initGame = async () => {
 const handlePlayerMove = ({ x, y }: { x: number, y: number }) => {
   if (aiThinking.value) return; // AI 思考时禁止落子
   const index = y * boardSize.value + x;
-  if (boardState.value[index] !== 0) return; // 已经有子
+  if (boardState.value[index] !== 0) {
+    statusMessage.value = '此处已有子！';
+    return;
+  }
 
-  // 本地落黑子
-  boardState.value[index] = 1;
+  // 不再进行本地乐观更新 (boardState.value[index] = playerColor.value)
+  // 因为吃子、打劫等复杂规则需要依赖后端的 sync_board 绝对同步
   lastMove.value = { x, y };
-  moveHistory.value.push({x, y, color: 1, winRate: winRate.value});
-  statusMessage.value = '落子成功，AI 开始思考...';
+  moveHistory.value.push({x, y, color: playerColor.value, winRate: winRate.value});
+  statusMessage.value = '校验落子中，AI 准备思考...';
   aiThinking.value = true;
   currentHints.value = [];
 
-  // 发送给后端
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ action: 'play', move: [x, y] }));
   }
