@@ -13,3 +13,7 @@ pytest
 pyyaml
 fastapi
 uvicorn
+matplotlib
+
+websockets
+pydantic

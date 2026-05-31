@@ -50,6 +50,7 @@ class Evaluator:
 
         eval_temp_threshold = self.config['train_params'].get('eval_temp_threshold', 4)
         move_num = 0
+        move_sequence = []
         
         while True:
             current_player = game.GetCurrentPlayer()
@@ -66,6 +67,7 @@ class Evaluator:
                 action_prob = np.array(action_prob, dtype=np.float64)
                 action_prob /= np.sum(action_prob) 
                 action = np.random.choice(len(action_prob), p=action_prob)
+            move_sequence.append(int(action))
             game.Step(int(action))
             black_mcts.UpdateWithMove(int(action))
             white_mcts.UpdateWithMove(int(action))
@@ -78,22 +80,27 @@ class Evaluator:
                 elif reward < -0.5:
                     winner = core_engine.Player.White if current_player == core_engine.Player.Black else core_engine.Player.Black
                 else:
-                    return 0
+                    return 0, move_sequence, core_engine.Player.NonePlayer
 
                 if current_best_is_black:
-                    return 1 if winner == core_engine.Player.White else -1
+                    return (1 if winner == core_engine.Player.White else -1), move_sequence, winner
                 else:
-                    return 1 if winner == core_engine.Player.Black else -1
+                    return (1 if winner == core_engine.Player.Black else -1), move_sequence, winner
 
-    def evaluate(self, num_games=10):
+    def evaluate(self, num_games=10, iteration=0, iteration_start_time=None):
         logging.info(f"Evaluating candidate model for {num_games} games...")
         candidate_wins = 0
         for i in range(num_games):
             current_best_is_black = (i % 2 == 0)
-            res = self.play_match(current_best_is_black)
+            res, move_sequence, winner = self.play_match(current_best_is_black)
             if res == 1:
                 candidate_wins += 1
             logging.info(f"Game {i+1}: candidate win: {res == 1}")
+            
+            render_interval = self.config['train_params'].get('render_interval', 10)
+            if (i + 1) % render_interval == 0:
+                from train.Render import render_game
+                render_game(move_sequence, self.config, i + 1, winner, self.mode, iteration, iteration_start_time)
         
         win_rate = candidate_wins / num_games
         logging.info(f"Candidate win rate: {win_rate:.2f}")

@@ -17,7 +17,8 @@ from train.ReplayBuffer import ReplayBuffer
 from train.Evaluate import Evaluator
 
 class Trainer:
-    def __init__(self, config_path, mode="go"):
+    def __init__(self, config_path, mode="go", no_epsilon=False):
+        self.no_epsilon = no_epsilon
         self.mode = mode
         self.config_path = config_path
         with open(config_path, 'r') as f:
@@ -32,7 +33,7 @@ class Trainer:
                                     lr=self.config['train_params'].get('learning_rate', 1e-3),
                                     weight_decay=self.config['train_params'].get('weight_decay', 1e-4))
         self.replay_buffer = ReplayBuffer(self.config['train_params']['replay_buffer_size'])
-        self.worker = SelfPlayWorker(self.config, self.model_manager, self.mode)
+        self.worker = SelfPlayWorker(self.config, self.model_manager, self.mode, self.no_epsilon)
         
         self.weights_dir = os.path.join(root_dir, 'weights', self.mode)
         os.makedirs(self.weights_dir, exist_ok=True)
@@ -46,13 +47,13 @@ class Trainer:
             self.model_manager.save_model(self.best_model_path)
         
 
-    def collect_selfplay_data(self, num_games):
+    def collect_selfplay_data(self, num_games, iteration=0, iteration_start_time=None):
         logging.info(f"Starting self-play for {num_games} games...")
         import core_engine
         steps = []
         black_wins = 0
         for i in range(num_games):
-            game_data, step_count, winner = self.worker.play_one_game()
+            game_data, step_count, winner, move_sequence = self.worker.play_one_game()
             for s, prob, z in game_data:
                 self.replay_buffer.add(s, prob, z)
             
@@ -121,7 +122,9 @@ class Trainer:
             logging.info("")
             logging.info(f"--- Iteration {it+1}/{iterations} ---")
             num_games = self.config['train_params'].get('num_games_per_iteration', 10)
-            self.collect_selfplay_data(num_games) 
+            import datetime
+            iteration_start_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            self.collect_selfplay_data(num_games, it + 1, iteration_start_time) 
             
             # 训练前，将当前网络权重先存为临时模型
             temp_model_path = os.path.join(self.weights_dir, "temp_model.pt")
@@ -148,7 +151,7 @@ class Trainer:
             evaluator.load_models(self.best_model_path, temp_model_path)
             
             num_eval_games = self.config['train_params'].get('num_eval_games', 10)
-            is_better = evaluator.evaluate(num_eval_games)
+            is_better = evaluator.evaluate(num_eval_games, it + 1, iteration_start_time)
             
             if is_better:
                 logging.warning("Candidate model accepted! Saving as new best model.")
@@ -162,9 +165,10 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', type=str, default='go', choices=['go', 'gomoku'])
+    parser.add_argument('--no-epsilon', action='store_true', help='Disable Dirichlet noise during self-play')
     args = parser.parse_args()
 
-    log_dir = os.path.join(root_dir, 'logs')
+    log_dir = os.path.join(root_dir, 'logs', args.mode)
     os.makedirs(log_dir, exist_ok=True)
     
     for handler in logging.root.handlers[:]:
@@ -179,6 +183,6 @@ if __name__ == "__main__":
         ]
     )
 
-    trainer = Trainer(os.path.join(root_dir, 'config', f'{args.mode}.yaml'), args.mode)
+    trainer = Trainer(os.path.join(root_dir, 'config', f'{args.mode}.yaml'), args.mode, args.no_epsilon)
     num_iterations = trainer.config['train_params'].get('num_iterations', 100)
     trainer.run_training_loop(num_iterations)

@@ -10,10 +10,11 @@ import core_engine
 from nn.ModelManager import ModelManager
 
 class SelfPlayWorker:
-    def __init__(self, config, model_manager, mode="go"):
+    def __init__(self, config, model_manager, mode="go", no_epsilon=False):
         self.config = config
         self.model_manager = model_manager
         self.mode = mode
+        self.no_epsilon = no_epsilon
         self.board_size = config['env_params']['board_size']
         self.num_simulations = config['mcts_params']['num_simulations']
         self.c_puct = config['mcts_params']['c_puct']
@@ -54,7 +55,7 @@ class SelfPlayWorker:
 
 
     def play_one_game(self):
-        dir_eps = self.config['mcts_params']['dirichlet_epsilon']
+        dir_eps = 0.0 if self.no_epsilon else self.config['mcts_params']['dirichlet_epsilon']
         dir_alpha = self.config['mcts_params']['dirichlet_alpha']
         if self.mode == 'go':
             komi = self.config['env_params'].get('komi', 7.5)
@@ -71,6 +72,7 @@ class SelfPlayWorker:
         states = []
         search_probs = []
         players = []
+        move_sequence = []
 
         step_count = 0
         while True:
@@ -94,6 +96,7 @@ class SelfPlayWorker:
                 action_prob = np.ones(len(action_prob)) / len(action_prob)
             
             action = np.random.choice(len(action_prob), p=action_prob)
+            move_sequence.append(int(action))
 
             game.Step(int(action))
             mcts.UpdateWithMove(int(action))
@@ -124,4 +127,4 @@ class SelfPlayWorker:
                     symm_samples = self.get_symmetries(s, prob, z, in_channels)
                     game_data.extend(symm_samples)
                 
-                return game_data, step_count, winner
+                return game_data, step_count, winner, move_sequence
