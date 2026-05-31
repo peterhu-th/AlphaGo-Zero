@@ -26,3 +26,7 @@ weights/
 # 论文
 articles/
 *.pdf
+
+# 记录
+notes.md
+

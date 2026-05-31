@@ -111,8 +111,6 @@ class SelfPlayWorker:
                 else:
                     winner = core_engine.Player.NonePlayer
                 
-                logging.info(f"Game finished in {step_count} moves. Winner: {winner}")
-                
                 game_data = []
                 in_channels = self.config['env_params']['in_channels']
 
@@ -126,4 +124,4 @@ class SelfPlayWorker:
                     symm_samples = self.get_symmetries(s, prob, z, in_channels)
                     game_data.extend(symm_samples)
                 
-                return game_data
+                return game_data, step_count, winner

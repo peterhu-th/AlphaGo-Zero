@@ -1,6 +1,7 @@
 import sys
 import os
 import argparse
+import logging
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'lib'))
@@ -85,23 +86,23 @@ class Evaluator:
                     return 1 if winner == core_engine.Player.Black else -1
 
     def evaluate(self, num_games=10):
-        print(f"Evaluating candidate model for {num_games} games...")
+        logging.info(f"Evaluating candidate model for {num_games} games...")
         candidate_wins = 0
         for i in range(num_games):
             current_best_is_black = (i % 2 == 0)
             res = self.play_match(current_best_is_black)
             if res == 1:
                 candidate_wins += 1
-            print(f"Game {i+1}: candidate win: {res == 1}")
+            logging.info(f"Game {i+1}: candidate win: {res == 1}")
         
         win_rate = candidate_wins / num_games
-        print(f"Candidate win rate: {win_rate:.2f}")
+        logging.info(f"Candidate win rate: {win_rate:.2f}")
         
         if win_rate >= self.config['train_params'].get('eval_win_rate_threshold', 0.55):
-            print("Candidate model is better. Replacing best model.")
+            logging.warning("Candidate model is better. Replacing best model.")
             return True
         else:
-            print("Candidate model rejected.")
+            logging.info("Candidate model rejected.")
             return False
 
 if __name__ == "__main__":

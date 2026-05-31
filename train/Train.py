@@ -48,11 +48,27 @@ class Trainer:
 
     def collect_selfplay_data(self, num_games):
         logging.info(f"Starting self-play for {num_games} games...")
+        import core_engine
+        steps = []
+        black_wins = 0
         for i in range(num_games):
-            game_data = self.worker.play_one_game()
+            game_data, step_count, winner = self.worker.play_one_game()
             for s, prob, z in game_data:
                 self.replay_buffer.add(s, prob, z)
-            logging.info(f"Game {i+1} completed, buffer size: {len(self.replay_buffer)}")
+            
+            steps.append(step_count)
+            if winner == core_engine.Player.Black:
+                black_wins += 1
+                
+            if (i + 1) % 10 == 0:
+                logging.info(f"Game {i+1} completed in {step_count} moves. Winner: {winner}. Buffer size: {len(self.replay_buffer)}")
+        
+        if len(steps) > 0:
+            max_s = max(steps)
+            min_s = min(steps)
+            avg_s = sum(steps) / len(steps)
+            win_rate = black_wins / len(steps)
+            logging.info(f"Self-play Summary -> Max Steps: {max_s}, Min Steps: {min_s}, Avg Steps: {avg_s:.1f}, Black Win Rate: {win_rate:.2%}")
 
 
     def train_step(self):
@@ -111,9 +127,9 @@ class Trainer:
             temp_model_path = os.path.join(self.weights_dir, "temp_model.pt")
             self.model_manager.save_model(temp_model_path)
             
-            # 充分训练当前经验池
+            new_samples_estimate = self.config['train_params']['num_games_per_iteration'] * 80 * 8
             batch_size = self.config['train_params']['batch_size']
-            num_batches = max(1, len(self.replay_buffer) // batch_size)
+            num_batches = max(1, new_samples_estimate // batch_size)
             
             for epoch in range(self.config['train_params']['num_epochs']):
                 total_t, total_v, total_p = 0, 0, 0
