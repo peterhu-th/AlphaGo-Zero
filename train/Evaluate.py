@@ -28,11 +28,13 @@ class Evaluator:
         dir_alpha = self.config['mcts_params']['dirichlet_alpha']
         
         if self.mode == 'go':
-            komi = self.config['env_params'].get('komi', 7.5)
-            max_moves = self.config['env_params'].get('max_moves', 60)
+            komi = self.config['env_params'].get('komi', 6)
+            max_moves = self.config['env_params'].get('max_moves', 120)
             game = core_engine.GoGame(self.config['env_params']['board_size'], dir_eps, dir_alpha, komi, max_moves)
-        else:
+        elif self.mode == 'gomoku':
             game = core_engine.GomokuGame(self.config['env_params']['board_size'], dir_eps, dir_alpha)
+        else:
+            raise NotImplementedError(f"Mode {self.mode} is not supported yet.")
         
         if current_best_is_black:
             black_eval = self.best_model.evaluate
@@ -114,7 +116,7 @@ class Evaluator:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', type=str, default='go', choices=['go', 'gomoku'])
+    parser.add_argument('--mode', type=str, default='go', help='Game mode: go, gomoku, or others')
     args = parser.parse_args()
     
     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

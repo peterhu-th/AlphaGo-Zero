@@ -2,8 +2,86 @@
 #include <sstream>
 #include <iostream>
 
+bool GomokuGame::lookup_table_initialized_ = false;
+uint8_t GomokuGame::lookup_table_[19683];
+
+void GomokuGame::InitLookupTable() {
+    if (lookup_table_initialized_) return;
+    
+    for (int i = 0; i < 19683; ++i) {
+        int temp = i;
+        int A[9];
+        for (int j = 0; j < 9; ++j) {
+            A[j] = temp % 3;
+            temp /= 3;
+        }
+        
+        if (A[4] != 1) {
+            lookup_table_[i] = 0;
+            continue;
+        }
+        
+        int l = 4, r = 4;
+        while (l > 0 && A[l - 1] == 1) l--;
+        while (r < 8 && A[r + 1] == 1) r++;
+        int contig = r - l + 1;
+        
+        uint8_t overline = 0;
+        uint8_t five = 0;
+        uint8_t fours = 0;
+        uint8_t live_threes = 0;
+        
+        if (contig >= 6) {
+            overline = 1;
+        } else if (contig == 5) {
+            five = 1;
+        } else {
+            int four_spots = 0;
+            for (int j = 0; j < 9; ++j) {
+                if (A[j] == 0) {
+                    A[j] = 1;
+                    int sl = 4, sr = 4;
+                    while (sl > 0 && A[sl - 1] == 1) sl--;
+                    while (sr < 8 && A[sr + 1] == 1) sr++;
+                    if (sr - sl + 1 == 5) four_spots++;
+                    A[j] = 0;
+                }
+            }
+            
+            bool is_live_four = (contig == 4 && l > 0 && A[l-1] == 0 && r < 8 && A[r+1] == 0);
+            if (is_live_four) fours = 1;
+            else fours = four_spots;
+            
+            int live_three_spots = 0;
+            for (int j = 0; j < 9; ++j) {
+                if (A[j] == 0) {
+                    A[j] = 1;
+                    int sl = 4, sr = 4;
+                    while (sl > 0 && A[sl - 1] == 1) sl--;
+                    while (sr < 8 && A[sr + 1] == 1) sr++;
+                    if (sr - sl + 1 == 4 && sl > 0 && A[sl-1] == 0 && sr < 8 && A[sr+1] == 0) {
+                        live_three_spots++;
+                    }
+                    A[j] = 0;
+                }
+            }
+            if (live_three_spots > 0) live_threes = 1;
+        }
+        
+        uint8_t val = 0;
+        val |= (live_threes & 0x03);
+        val |= ((fours & 0x03) << 2);
+        val |= ((five & 0x01) << 4);
+        val |= ((overline & 0x01) << 5);
+        lookup_table_[i] = val;
+    }
+    
+    lookup_table_initialized_ = true;
+}
+
 GomokuGame::GomokuGame(int board_size, float dir_epsilon, float dir_alpha)
     : board_size_(board_size), dir_epsilon_(dir_epsilon), dir_alpha_(dir_alpha), action_size_(board_size * board_size) {
+    InitLookupTable();
     Reset();
 }
 
@@ -18,13 +96,18 @@ int GomokuGame::GetActionSize() const {
 void GomokuGame::Reset() {
     board_.assign(board_size_ * board_size_, Player::NonePlayer);
     current_player_ = Player::Black;
+    forbidden_points_.clear();
 }
 
 std::vector<int> GomokuGame::GetLegalMoves() const {
     std::vector<int> legal_moves(action_size_, 0);
     for (int i = 0; i < action_size_; ++i) {
         if (board_[i] == Player::NonePlayer) {
-            legal_moves[i] = 1;
+            if (current_player_ == Player::Black && forbidden_points_.count(i)) {
+                legal_moves[i] = 0;
+            } else {
+                legal_moves[i] = 1;
+            }
         }
     }
     return legal_moves;
@@ -32,12 +115,85 @@ std::vector<int> GomokuGame::GetLegalMoves() const {
 
 Player GomokuGame::Step(int action) {
     if (action < 0 || action >= action_size_ || board_[action] != Player::NonePlayer) {
-        // Illegal move is not expected to be chosen by MCTS.
+        // 禁手不传递给 MCTS 搜索
         return current_player_;
     }
     board_[action] = current_player_;
+    
+    UpdateForbiddenPoints(action);
+    
     current_player_ = (current_player_ == Player::Black) ? Player::White : Player::Black;
     return current_player_;
+}
+
+bool GomokuGame::CheckForbidden(int x, int y) const {
+    int total_live_threes = 0;
+    int total_fours = 0;
+    bool has_overline = false;
+
+    int dx[] = {1, 0, 1, 1};
+    int dy[] = {0, 1, 1, -1};
+
+    for (int d = 0; d < 4; ++d) {
+        int index = 0;
+        int p = 1;
+        for (int i = -4; i <= 4; ++i) {
+            int nx = x + i * dx[d];
+            int ny = y + i * dy[d];
+            int val = 0;
+            if (nx >= 0 && nx < board_size_ && ny >= 0 && ny < board_size_) {
+                Player cell = board_[nx * board_size_ + ny];
+                if (i == 0) val = 1;
+                else if (cell == Player::Black) val = 1;
+                else if (cell == Player::White) val = 2;
+            } else {
+                val = 2;
+            }
+            index += val * p;
+            p *= 3;
+        }
+
+        uint8_t state = lookup_table_[index];
+        if (state & (1 << 4)) return false;
+        if (state & (1 << 5)) has_overline = true;
+
+        total_live_threes += (state & 0x03);
+        total_fours += ((state >> 2) & 0x03);
+    }
+
+    if (has_overline) return true;
+    if (total_fours >= 2) return true;
+    if (total_live_threes >= 2) return true;
+
+    return false;
+}
+
+void GomokuGame::UpdateForbiddenPoints(int move) {
+    int mx = move / board_size_;
+    int my = move % board_size_;
+    
+    forbidden_points_.erase(move);
+    
+    int dx[] = {1, 0, 1, 1};
+    int dy[] = {0, 1, 1, -1};
+    
+    for (int d = 0; d < 4; ++d) {
+        for (int i = -4; i <= 4; ++i) {
+            if (i == 0) continue;
+            int nx = mx + i * dx[d];
+            int ny = my + i * dy[d];
+            if (nx >= 0 && nx < board_size_ && ny >= 0 && ny < board_size_) {
+                int p = nx * board_size_ + ny;
+                if (board_[p] == Player::NonePlayer) {
+                    if (CheckForbidden(nx, ny)) {
+                        forbidden_points_.insert(p);
+                    } else {
+                        forbidden_points_.erase(p);
+                    }
+                }
+            }
+        }
+    }
 }
 
 bool GomokuGame::CheckWin(int x, int y, Player player) const {
@@ -79,10 +235,6 @@ std::pair<bool, float> GomokuGame::GetGameEnded() const {
             Player p = board_[i * board_size_ + j];
             if (p != Player::NonePlayer) {
                 if (CheckWin(i, j, p)) {
-                    // 由于走步后玩家会切换，所以如果 p (走完这步的人) 赢了
-                    // 那么相对于当前的 current_player_ 来说，结果是输了。
-                    // 返回的 float value 是当前 current_player_ 视角的价值。
-                    // 如果 p 是当前的上一手，他赢了，说明当前回合的人输了 (-1)。
                     return {true, -1.0f};
                 }
             } else {

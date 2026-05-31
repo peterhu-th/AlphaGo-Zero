@@ -3,6 +3,7 @@
 #include "../GameInterface.h"
 #include <vector>
 #include <set>
+#include <cstdint>
 
 class GomokuGame : public GameInterface {
 public:
@@ -30,4 +31,18 @@ private:
     std::vector<Player> board_;
     
     bool CheckWin(int x, int y, Player player) const;
+
+    // 禁手优化：查表法与增量缓存
+    std::set<int> forbidden_points_;
+    void UpdateForbiddenPoints(int move);
+    bool CheckForbidden(int x, int y) const;
+
+    static void InitLookupTable();
+    static bool lookup_table_initialized_;
+    // 预计算表，大小 3^9 = 19683
+    // bit 0-1: live_threes (活三数量)
+    // bit 2-3: fours (四数量)
+    // bit 4: five (是否连五)
+    // bit 5: overline (是否长连)
+    static uint8_t lookup_table_[19683];
 };

@@ -164,7 +164,7 @@ class Trainer:
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', type=str, default='go', choices=['go', 'gomoku'])
+    parser.add_argument('--mode', type=str, default='go', help='Game mode: go, gomoku, or others')
     parser.add_argument('--no-epsilon', action='store_true', help='Disable Dirichlet noise during self-play')
     args = parser.parse_args()
 

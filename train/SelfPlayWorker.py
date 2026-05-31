@@ -23,22 +23,26 @@ class SelfPlayWorker:
 
     def get_symmetries(self, state_flat, pi_flat, z, in_channels):
         board_size = self.board_size
-        # 将 1D 列表重塑为 3D numpy 数组 (channels, height, width)
         state = np.array(state_flat).reshape(in_channels, board_size, board_size)
         pi = np.array(pi_flat)
         
-        # 剥离 PASS 动作，将落子概率重塑为 2D 棋盘形状
-        pi_board = pi[:-1].reshape(board_size, board_size)
-        pi_pass = pi[-1]
-        
+        if self.mode == 'go':
+            pi_board = pi[:-1].reshape(board_size, board_size)
+            pi_pass = pi[-1]
+        elif self.mode == 'gomoku':
+            pi_board = pi.reshape(board_size, board_size)
+            pi_pass = None
+        else:
+            # 预留给其他棋类
+            pi_board = pi.reshape(board_size, board_size)
+            pi_pass = None
+            
         symm_data = []
         
-        # 4 种旋转: 0度, 90度, 180度, 270度
         for i in range(4):
             s_rot = np.rot90(state, k=i, axes=(1, 2))
             p_rot = np.rot90(pi_board, k=i)
             
-            # 2 种镜像: 原图, 水平翻转
             for flip in [False, True]:
                 if flip:
                     s_trans = np.flip(s_rot, axis=2)
@@ -47,8 +51,11 @@ class SelfPlayWorker:
                     s_trans = s_rot
                     p_trans = p_rot
                     
-                # 展平策略，并把 PASS 动作加回末尾
-                p_final = np.append(p_trans.flatten(), pi_pass)
+                if self.mode == 'go':
+                    p_final = np.append(p_trans.flatten(), pi_pass)
+                else:
+                    p_final = p_trans.flatten()
+                    
                 symm_data.append((s_trans.flatten().tolist(), p_final.tolist(), z))
                 
         return symm_data
@@ -61,8 +68,10 @@ class SelfPlayWorker:
             komi = self.config['env_params'].get('komi', 7.5)
             max_moves = self.config['env_params'].get('max_moves', 60)
             game = core_engine.GoGame(self.board_size, dir_eps, dir_alpha, komi, max_moves)
-        else:
+        elif self.mode == 'gomoku':
             game = core_engine.GomokuGame(self.board_size, dir_eps, dir_alpha)
+        else:
+            raise NotImplementedError(f"Mode {self.mode} is not supported yet.")
 
         batch_size = self.config['mcts_params'].get('virtual_loss_batch_size', 8)
         virtual_loss = self.config['mcts_params'].get('virtual_loss', 3.0)

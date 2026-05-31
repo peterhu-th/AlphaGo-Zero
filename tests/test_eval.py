@@ -1,5 +1,5 @@
 import sys, os, yaml
-root_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(root_dir); sys.path.append(os.path.join(root_dir, 'lib'))
 import core_engine
 from nn.ModelManager import ModelManager
