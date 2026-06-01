@@ -1,14 +1,14 @@
 env_params:
   board_size: 15
   action_size: 225
-  in_channels: 3
+  in_channels: 4
 
 mcts_params:
-  num_simulations: 400
-  c_puct: 1.5
+  num_simulations: 800
+  c_puct: 2.0
   dirichlet_epsilon: 0.25
   dirichlet_alpha: 0.04
-  temperature_threshold: 20
+  temperature_threshold: 10
 
 network_params:
   num_residual_blocks: 10
@@ -18,7 +18,7 @@ train_params:
   batch_size: 256
   learning_rate: 0.001
   num_epochs: 5
-  eval_win_rate_threshold: 0.50
+  eval_win_rate_threshold: 0.55
   replay_buffer_size: 100000
   momentum: 0.9
   weight_decay: 0.0001

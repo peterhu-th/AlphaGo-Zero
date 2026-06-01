@@ -251,21 +251,36 @@ std::pair<bool, float> GomokuGame::GetGameEnded() const {
 }
 
 std::vector<float> GomokuGame::GetStateFeatures() const {
-    // 3 channels: current player, opponent player, color indicator
-    std::vector<float> features(3 * board_size_ * board_size_, 0.0f);
+    // channels: current player pieces、opponent player pieces、color indicator、legal moves (empty & not forbidden for current player)
+    std::vector<float> features(4 * board_size_ * board_size_, 0.0f);
+    
     int offset_self = 0;
     int offset_opp = board_size_ * board_size_;
     int offset_color = 2 * board_size_ * board_size_;
+    int offset_legal = 3 * board_size_ * board_size_;
     
     Player opponent = (current_player_ == Player::Black) ? Player::White : Player::Black;
     
     for (int i = 0; i < board_size_ * board_size_; ++i) {
+        // 本方棋子
         if (board_[i] == current_player_) features[offset_self + i] = 1.0f;
+        // 对方棋子
         else if (board_[i] == opponent) features[offset_opp + i] = 1.0f;
         
+        // 当前颜色标识 (黑棋为 1.0，白棋为 -1.0)
         features[offset_color + i] = (current_player_ == Player::Black) ? 1.0f : -1.0f;
+        
+        // 合法落子标识
+        if (board_[i] == Player::NonePlayer) {
+            if (current_player_ == Player::Black && forbidden_points_.count(i)) {
+                features[offset_legal + i] = 0.0f; // 禁手
+            } else {
+                features[offset_legal + i] = 1.0f; // 合法空位
+            }
+        } else {
+            features[offset_legal + i] = 0.0f; // 已经被占用的格子
+        }
     }
-    
     return features;
 }
 

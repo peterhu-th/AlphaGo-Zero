@@ -10,6 +10,7 @@ import core_engine
 from nn.ModelManager import ModelManager
 import yaml
 
+
 class Evaluator:
     def __init__(self, config_path, mode="go"):
         self.mode = mode
@@ -89,6 +90,7 @@ class Evaluator:
                 else:
                     return (1 if winner == core_engine.Player.Black else -1), move_sequence, winner
 
+
     def evaluate(self, num_games=10, iteration=0, iteration_start_time=None):
         logging.info(f"Evaluating candidate model for {num_games} games...")
         candidate_wins = 0
@@ -97,22 +99,22 @@ class Evaluator:
             res, move_sequence, winner = self.play_match(current_best_is_black)
             if res == 1:
                 candidate_wins += 1
-            logging.info(f"Game {i+1}: candidate win: {res == 1}")
+            if (i + 1) % (num_games / 10) == 0:
+                logging.info(f"Game {i+1}: candidate win: {res == 1}")
             
-            render_interval = self.config['train_params'].get('render_interval', 10)
-            if (i + 1) % render_interval == 0:
-                from train.Render import render_game
-                render_game(move_sequence, self.config, i + 1, winner, self.mode, iteration, iteration_start_time)
+            # render_interval = self.config['train_params'].get('render_interval', 10)
+            # if (i + 1) % render_interval == 0:
+            #     from train.Render import render_game
+            #     render_game(move_sequence, self.config, i + 1, winner, self.mode, iteration, iteration_start_time)
         
         win_rate = candidate_wins / num_games
         logging.info(f"Candidate win rate: {win_rate:.2f}")
         
         if win_rate >= self.config['train_params'].get('eval_win_rate_threshold', 0.55):
-            logging.warning("Candidate model is better. Replacing best model.")
             return True
         else:
-            logging.info("Candidate model rejected.")
             return False
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

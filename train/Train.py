@@ -25,13 +25,13 @@ class Trainer:
             self.config = yaml.safe_load(f)
             
         self.model_manager = ModelManager(self.config)
-        # self.optimizer = optim.SGD(self.model_manager.model.parameters(), 
-        #                            lr=self.config['train_params']['learning_rate'], 
-        #                            momentum=self.config['train_params'].get('momentum', 0.9), 
-        #                            weight_decay=self.config['train_params'].get('weight_decay', 1e-4))
-        self.optimizer = optim.AdamW(self.model_manager.model.parameters(),
-                                    lr=self.config['train_params'].get('learning_rate', 1e-3),
-                                    weight_decay=self.config['train_params'].get('weight_decay', 1e-4))
+        self.optimizer = optim.SGD(self.model_manager.model.parameters(), 
+                                   lr=self.config['train_params']['learning_rate'], 
+                                   momentum=self.config['train_params'].get('momentum', 0.9), 
+                                   weight_decay=self.config['train_params'].get('weight_decay', 1e-4))
+        # self.optimizer = optim.AdamW(self.model_manager.model.parameters(),
+        #                             lr=self.config['train_params'].get('learning_rate', 1e-3),
+        #                             weight_decay=self.config['train_params'].get('weight_decay', 1e-4))
         self.replay_buffer = ReplayBuffer(self.config['train_params']['replay_buffer_size'])
         self.worker = SelfPlayWorker(self.config, self.model_manager, self.mode, self.no_epsilon)
         
@@ -61,15 +61,15 @@ class Trainer:
             if winner == core_engine.Player.Black:
                 black_wins += 1
                 
-            if (i + 1) % 10 == 0:
-                logging.info(f"Game {i+1} completed in {step_count} moves. Winner: {winner}. Buffer size: {len(self.replay_buffer)}")
+            if (i + 1) % (num_games / 10) == 0:
+                logging.info(f"Game {i+1} : {step_count} moves. Winner: {winner}. Buffer size: {len(self.replay_buffer)}")
         
         if len(steps) > 0:
             max_s = max(steps)
             min_s = min(steps)
             avg_s = sum(steps) / len(steps)
             win_rate = black_wins / len(steps)
-            logging.info(f"Self-play Summary -> Max Steps: {max_s}, Min Steps: {min_s}, Avg Steps: {avg_s:.1f}, Black Win Rate: {win_rate:.2%}")
+            logging.info(f"Self-play Summary: Max Steps: {max_s}, Min Steps: {min_s}, Avg Steps: {avg_s:.1f}, Black Win Rate: {win_rate:.2%}")
 
 
     def train_step(self):

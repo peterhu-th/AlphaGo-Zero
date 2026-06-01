@@ -88,6 +88,7 @@ def render_game(move_sequence, config, game_idx, winner, mode="go", iteration=0,
         
     ax.set_xlim(-1, board_size)
     ax.set_ylim(-1, board_size)
+    ax.set_aspect('equal')
     ax.axis('off')
     
     time_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
