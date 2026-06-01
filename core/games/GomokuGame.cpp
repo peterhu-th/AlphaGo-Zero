@@ -292,6 +292,18 @@ std::unique_ptr<GameInterface> GomokuGame::Clone() const {
     return std::make_unique<GomokuGame>(*this);
 }
 
+std::vector<int> GomokuGame::GetBoard() const {
+    std::vector<int> res(board_size_ * board_size_, 0);
+    for (int i = 0; i < board_size_ * board_size_; ++i) {
+        if (board_[i] == Player::Black) {
+            res[i] = 1;
+        } else if (board_[i] == Player::White) {
+            res[i] = 2;
+        }
+    }
+    return res;
+}
+
 std::string GomokuGame::ToString() const {
     std::stringstream ss;
     for (int i = 0; i < board_size_; ++i) {

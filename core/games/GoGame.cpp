@@ -437,6 +437,18 @@ std::unique_ptr<GameInterface> GoGame::Clone() const {
     return clone;
 }
 
+std::vector<int> GoGame::GetBoard() const {
+    std::vector<int> res(board_size_ * board_size_, 0);
+    for (int i = 0; i < board_size_ * board_size_; ++i) {
+        if (board_[i] == Player::Black) {
+            res[i] = 1;
+        } else if (board_[i] == Player::White) {
+            res[i] = 2;
+        }
+    }
+    return res;
+}
+
 std::string GoGame::ToString() const {
     std::stringstream ss;
     for (int x = 0; x < board_size_; ++x) {

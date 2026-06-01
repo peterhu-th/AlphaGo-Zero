@@ -21,6 +21,7 @@ public:
     Player GetCurrentPlayer() const override;
     std::unique_ptr<GameInterface> Clone() const override;
     std::string ToString() const override;
+    std::vector<int> GetBoard() const override;
     std::pair<float, float> GetDirichletParams() const override;
 
 private:

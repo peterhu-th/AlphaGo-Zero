@@ -47,6 +47,9 @@ public:
     // 将棋盘状态转换为字符串
     virtual std::string ToString() const = 0;
 
+    // 获取当前棋盘的一维数组表示 (用于 Wasm 前端直接渲染)
+    virtual std::vector<int> GetBoard() const = 0;
+
     // 获取狄利克雷噪声 (epsilon, alpha)
     virtual std::pair<float, float> GetDirichletParams() const = 0;
 };

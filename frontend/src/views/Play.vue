@@ -59,6 +59,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import Board from '../components/Board.vue';
+// @ts-ignore
+import initModule from '../game_core.js';
 
 // 游戏配置
 const mode = ref('go');
@@ -83,7 +85,10 @@ const moveHistory = ref<{x: number, y: number, color: number, winRate: number}[]
 
 // WebSocket 实例
 let ws: WebSocket | null = null;
-let gameId: string | null = null;
+
+// Wasm 实例
+let wasmModule: any = null;
+let wasmGame: any = null;
 
 const initBoard = () => {
   boardState.value = new Array(boardSize.value * boardSize.value).fill(0);
@@ -92,6 +97,13 @@ const initBoard = () => {
   winRate.value = 0.5;
   moveHistory.value = [];
   statusMessage.value = playerColor.value === 1 ? '准备就绪，轮到黑方（你）落子' : '准备就绪，等待AI落子';
+
+  if (wasmModule) {
+    if (wasmGame) {
+      wasmGame.delete();
+    }
+    wasmGame = new wasmModule.WasmGameWrapper(mode.value, boardSize.value);
+  }
 };
 
 const undoMove = () => {
@@ -106,10 +118,16 @@ const undoMove = () => {
   }
   
   // 重构棋盘
-  boardState.value = new Array(boardSize.value * boardSize.value).fill(0);
-  moveHistory.value.forEach(m => {
-    boardState.value[m.y * boardSize.value + m.x] = m.color;
-  });
+  if (wasmGame) {
+    const syncHistory = moveHistory.value.map(m => [m.x, m.y]);
+    wasmGame.sync_state(syncHistory);
+    boardState.value = Array.from(wasmGame.get_board());
+  } else {
+    boardState.value = new Array(boardSize.value * boardSize.value).fill(0);
+    moveHistory.value.forEach(m => {
+      boardState.value[m.y * boardSize.value + m.x] = m.color;
+    });
+  }
   
   if (moveHistory.value.length > 0) {
     const m = moveHistory.value[moveHistory.value.length - 1];
@@ -190,6 +208,11 @@ const initGame = async () => {
       statusMessage.value = '落子非法（打劫或禁手）！请重新落子。';
       moveHistory.value.pop(); // 撤回刚才加入的历史
       currentHints.value = [];
+      if (wasmGame) {
+         const historyForWasm = moveHistory.value.map(m => [m.x, m.y]);
+         wasmGame.sync_state(historyForWasm);
+         boardState.value = Array.from(wasmGame.get_board());
+      }
     }
     else if (data.action === 'thinking') {
       aiThinking.value = true;
@@ -210,6 +233,11 @@ const initGame = async () => {
       } else {
         moveHistory.value.push({x, y, color: aiColor, winRate: winRate.value});
         statusMessage.value = 'AI 落子完毕，轮到你';
+      }
+      
+      if (wasmGame) {
+         wasmGame.play_move(x, y, aiColor);
+         boardState.value = Array.from(wasmGame.get_board());
       }
       currentHints.value = [];
     }
@@ -258,14 +286,23 @@ const initGame = async () => {
 
 const handlePlayerMove = ({ x, y }: { x: number, y: number }) => {
   if (aiThinking.value) return; // AI 思考时禁止落子
-  const index = y * boardSize.value + x;
-  if (boardState.value[index] !== 0) {
-    statusMessage.value = '此处已有子！';
-    return;
+
+  if (wasmGame) {
+    const isValid = wasmGame.play_move(x, y, playerColor.value);
+    if (!isValid) {
+      statusMessage.value = '此处非法落子或已有子！';
+      return;
+    }
+    // 乐观渲染
+    boardState.value = Array.from(wasmGame.get_board());
+  } else {
+    const index = y * boardSize.value + x;
+    if (boardState.value[index] !== 0) {
+      statusMessage.value = '此处已有子！';
+      return;
+    }
   }
 
-  // 不再进行本地乐观更新 (boardState.value[index] = playerColor.value)
-  // 因为吃子、打劫等复杂规则需要依赖后端的 sync_board 绝对同步
   lastMove.value = { x, y };
   moveHistory.value.push({x, y, color: playerColor.value, winRate: winRate.value});
   statusMessage.value = '校验落子中，AI 准备思考...';
@@ -277,12 +314,18 @@ const handlePlayerMove = ({ x, y }: { x: number, y: number }) => {
   }
 };
 
-onMounted(() => {
+onMounted(async () => {
+  try {
+    wasmModule = await initModule();
+  } catch (e) {
+    console.error("Wasm 模块加载失败: ", e);
+  }
   initGame();
 });
 
 onUnmounted(() => {
   if (ws) ws.close();
+  if (wasmGame) wasmGame.delete();
 });
 </script>
 
