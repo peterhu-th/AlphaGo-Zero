@@ -132,7 +132,9 @@ class GameManager:
 
         num_sim = config['mcts_params']['num_simulations']
         c_puct = config['mcts_params']['c_puct']
-        self.mcts = core_engine.MCTS(self.model_manager.evaluate, num_sim, c_puct)
+        batch_size = config['mcts_params'].get('virtual_loss_batch_size', 8)
+        virtual_loss = config['mcts_params'].get('virtual_loss', 3.0)
+        self.mcts = core_engine.MCTS(self.model_manager.evaluate, num_sim, c_puct, batch_size, virtual_loss)
 
     def get_board_state(self):
         if not self.game:

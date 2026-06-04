@@ -4,11 +4,13 @@ env_params:
   in_channels: 4
 
 mcts_params:
-  num_simulations: 800
+  num_simulations: 1600
   c_puct: 2.0
   dirichlet_epsilon: 0.25
   dirichlet_alpha: 0.04
   temperature_threshold: 10
+  virtual_loss_batch_size: 8
+  virtual_loss: 3.0
 
 network_params:
   num_residual_blocks: 10
@@ -23,6 +25,6 @@ train_params:
   momentum: 0.9
   weight_decay: 0.0001
   initial_population: 1000
-  num_iterations: 100
-  num_games_per_iteration: 20
-  num_eval_games: 10
+  num_iterations: 50
+  num_games_per_iteration: 40
+  num_eval_games: 20

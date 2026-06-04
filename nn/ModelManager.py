@@ -29,7 +29,6 @@ class ModelManager:
     def load_model(self, path):
         if os.path.exists(path):
             self.model.load_state_dict(torch.load(path, map_location=self.device, weights_only=True))
-            print(f"Model loaded from {path}")
         else:
             print(f"Path {path} does not exist, starting with random weights.")
 

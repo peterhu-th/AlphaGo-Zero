@@ -25,13 +25,15 @@ class Trainer:
             self.config = yaml.safe_load(f)
             
         self.model_manager = ModelManager(self.config)
-        self.optimizer = optim.SGD(self.model_manager.model.parameters(), 
-                                   lr=self.config['train_params']['learning_rate'], 
-                                   momentum=self.config['train_params'].get('momentum', 0.9), 
-                                   weight_decay=self.config['train_params'].get('weight_decay', 1e-4))
-        # self.optimizer = optim.AdamW(self.model_manager.model.parameters(),
-        #                             lr=self.config['train_params'].get('learning_rate', 1e-3),
-        #                             weight_decay=self.config['train_params'].get('weight_decay', 1e-4))
+        if mode == "go":
+            self.optimizer = optim.SGD(self.model_manager.model.parameters(), 
+                                    lr=self.config['train_params']['learning_rate'], 
+                                    momentum=self.config['train_params'].get('momentum', 0.9), 
+                                    weight_decay=self.config['train_params'].get('weight_decay', 1e-4))
+        else:
+            self.optimizer = optim.AdamW(self.model_manager.model.parameters(),
+                                        lr=self.config['train_params'].get('learning_rate', 1e-3),
+                                        weight_decay=self.config['train_params'].get('weight_decay', 1e-4))
         self.replay_buffer = ReplayBuffer(self.config['train_params']['replay_buffer_size'])
         self.worker = SelfPlayWorker(self.config, self.model_manager, self.mode, self.no_epsilon)
         
@@ -94,10 +96,13 @@ class Trainer:
         
         value_loss = F.mse_loss(v, winners)
         policy_loss = -torch.sum(probs * log_pi) / probs.size(0)
-        
-        total_loss = value_loss + policy_loss
+        if self.mode == "go":
+            total_loss = value_loss + policy_loss
+        elif self.mode == "gomoku":
+            total_loss = value_loss + 2.0 * policy_loss
         
         total_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model_manager.model.parameters(), max_norm=1.0)
         self.optimizer.step()
         
         self.model_manager.model.eval()
@@ -159,7 +164,12 @@ class Trainer:
             else:
                 logging.info("Candidate model rejected. Reverting weights...")
                 self.model_manager.load_model(self.best_model_path)
-
+                # self.optimizer = optim.SGD(
+                #     self.model_manager.model.parameters(), 
+                #     lr=self.config['train_params']['learning_rate'], 
+                #     momentum=self.config['train_params'].get('momentum', 0.9), 
+                #     weight_decay=self.config['train_params'].get('weight_decay', 1e-4)
+                # )
 
 if __name__ == "__main__":
     import argparse

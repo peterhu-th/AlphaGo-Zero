@@ -29,12 +29,21 @@ void Node::expand(const std::vector<int>& legal_moves, const std::vector<float>&
             legal_count++;
         }
     }
-    if (sum < 1e-8f) sum = 1.0f;
     
     children_.reserve(legal_count);
-    for (size_t i = 0; i < legal_moves.size(); ++i) {
-        if (legal_moves[i] == 1) {
-            children_.emplace_back(i, std::make_unique<Node>(this, action_probs[i] / sum));
+    
+    if (sum < 1e-8f) {
+        float uniform_prob = 1.0f / static_cast<float>(legal_count);
+        for (size_t i = 0; i < legal_moves.size(); ++i) {
+            if (legal_moves[i] == 1) {
+                children_.emplace_back(i, std::make_unique<Node>(this, uniform_prob));
+            }
+        }
+    } else {
+        for (size_t i = 0; i < legal_moves.size(); ++i) {
+            if (legal_moves[i] == 1) {
+                children_.emplace_back(i, std::make_unique<Node>(this, action_probs[i] / sum));
+            }
         }
     }
 }
